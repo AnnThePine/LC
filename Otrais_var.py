@@ -26,8 +26,11 @@ def ipasvertibas(Bx, By, Bz, D=2.88):
 
     eigen = np.linalg.eig(Hamitonis)
     #print(Bz,Bx)
-    eigenvalues = eigen[0].real
-    eigenvectors = eigen[1].real
+    print(eigen[0])
+    print(eigen[1])
+    print(eigen[1].T.conj()@eigen[1])
+    eigenvalues = eigen[0]#.real
+    eigenvectors = eigen[1]#.real
     
 
     # for eing in range(3):
@@ -58,7 +61,7 @@ def lauksUnEnergijas(B,alfa,beta):
 
 def viens_centrs(alfa,beta, no,lidz, lauksvajadzigs = False):
 
-    lauks = np.linspace(no,lidz, 500)
+    lauks = np.linspace(no,lidz, 100)
     
     
     en, vectors = lauksUnEnergijas(lauks[0], alfa, beta)
@@ -72,7 +75,7 @@ def viens_centrs(alfa,beta, no,lidz, lauksvajadzigs = False):
     for i, B in enumerate(lauks[1:],1):
         en, vect = lauksUnEnergijas(B, alfa, beta)
         
-        A = np.abs(vectors.T@vect)
+        A = np.abs(vectors.T.conj()@vect)
         for e in range(3):
             # #vektors
             # skalarie_reiz = []
@@ -104,14 +107,17 @@ def viens_centrs(alfa,beta, no,lidz, lauksvajadzigs = False):
 
     if lauksvajadzigs:
         return lauks, energiju_limeni
+        # return lauks, energijas
 
     else:    
         return energiju_limeni
+        # return energijas
     
 
 def plot(dati):
     plt.figure(figsize=[10,6])
     x,y = dati
+    print(x.shape, y.shape)
     style = ['-', (5, (10, 3)), (0, (3, 5, 1, 5, 1, 5)), ':']
     colors = [
     "#ff5500", 
@@ -157,5 +163,6 @@ def cetri_centri(alfa, beta, no, līdz):
     
 
 
-plot(cetri_centri(24,46,0,0.3))
+# plot(cetri_centri(0,0,0,0.3))
+plot(viens_centrs(5,0,0,0.3, True))
 
