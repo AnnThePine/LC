@@ -47,25 +47,26 @@ def viens_centrs(Virziens, mag):
     return energiju_limeni
         #return energijas
 
-def Spektrs(energijas, platums=1):
+def Spektrs(energijas, platums=0.015):
 
     if type(energijas) == list:
         energijas = np.concatenate(energijas)
 
 
     # You can choose to use energijas range or fixed sak/beigu
-    mini = min(energijas) - 10 
-    maxi = max(energijas) + 10
+    mini = min(energijas) - 0.03 
+    maxi = max(energijas) + 0.03
 
     freq_range = np.linspace(mini, maxi, 5000)  # GHz
     odmr_signal = np.zeros_like(freq_range)
 
     for freq in energijas:
-        lorentz = (platums / (2 * np.pi)) / ((freq_range - freq)**2 + (0.5 * platums)**2)
+        lorentz = -(platums / (2 * np.pi)) / ((freq_range - freq)**2 + (0.5 * platums)**2)
         odmr_signal += lorentz
 
-    # Optionally invert for dip-style ODMR
-    odmr_signal = 1 - odmr_signal / np.max(odmr_signal)
+    odmr_signal /= np.min(odmr_signal)
+
+    odmr_signal = -odmr_signal
 
     return freq_range,odmr_signal
 
@@ -73,6 +74,7 @@ def Spektrs(energijas, platums=1):
 def plot(z): 
     x,y = z 
     plt.plot(x,y)
+    plt.tight_layout()
     plt.show()
 
 def grad_vect(alfa, beta):
@@ -139,4 +141,4 @@ def cetri_centri(lauka_virziens, mag):
 
 
 
-plot(Spektrs(cetri_centri(grad_vect(91,70),0.3)))
+plot(Spektrs(cetri_centri(grad_vect(30,0),0.005)))

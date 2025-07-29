@@ -174,7 +174,7 @@ def grad_vect(alfa, beta):
     return v
 
 
-plot(cetri_centri(grad_vect(89.9,35),0.0,0.3))
+plot(cetri_centri(grad_vect(60,0),0.0,0.003))
 
 
 # lauks = np.empty((3,len(mag_lauks)))
