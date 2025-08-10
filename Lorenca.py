@@ -36,12 +36,12 @@ def viens_centrs(Virziens, mag):
 
     lauks = np.array([mag * Virziens[0], mag * Virziens[1], mag * Virziens[2]])
 
-    #print(lauks[:, 0])
+    print(f"lauka komponentes :{lauks}")
     en, vectors = ipasvertibas(*lauks)
 
     energijas = np.sort(en)
 
-    # print(energijas.shape)
+    print(f"energijas :{energijas}")
     energiju_limeni = np.array((energijas[1]-energijas[0],energijas[2]-energijas[0]))
     
     return energiju_limeni
@@ -114,14 +114,6 @@ def cetri_centri(lauka_virziens, mag):
 
     #definējam nv asu virzienu 
 
-    NV1z = R@np.array(((1),(1),(1)))/np.sqrt(3)
-    NV1x = R@np.array(((1),(1),(1)))/np.sqrt(3)
-    NV1y = R@np.array(((1),(1),(1)))/np.sqrt(3)
-    
-    NV2 = R@np.array(((-1),(1),(-1)))/np.sqrt(3)
-    NV3 = R@np.array(((1),(-1),(-1)))/np.sqrt(3)
-    NV4 = R@np.array(((-1),(-1),(1)))/np.sqrt(3)
-
     NV_centri = [
         R @ np.array([ 1,  1,  1]) / np.sqrt(3),
         R @ np.array([-1,  1, -1]) / np.sqrt(3),
@@ -141,4 +133,4 @@ def cetri_centri(lauka_virziens, mag):
 
 
 
-plot(Spektrs(cetri_centri(grad_vect(30,0),0.005)))
+plot(Spektrs(cetri_centri(grad_vect(65,0),0.005)))

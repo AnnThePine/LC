@@ -102,15 +102,15 @@ def viens_centrs(alfa,beta, no,lidz, lauksvajadzigs = False):
     
     #print(energijas)
 
-    energiju_limeni = np.array((energijas[0]-energijas[1],energijas[2]-energijas[1]))
+    #energiju_limeni = np.array((energijas[0]-energijas[1],energijas[2]-energijas[1]))
     #print(energiju_limeni)
 
     if lauksvajadzigs:
-        return lauks, energiju_limeni
-        # return lauks, energijas
+        #return lauks, energiju_limeni
+        return lauks, energijas
 
-    else:    
-        return energiju_limeni
+    #else:    
+        #return energiju_limeni
         # return energijas
     
 
@@ -164,5 +164,5 @@ def cetri_centri(alfa, beta, no, līdz):
 
 
 # plot(cetri_centri(0,0,0,0.3))
-plot(viens_centrs(5,0,0,0.3, True))
+plot(viens_centrs(58,67,0,0.003, True))
 
