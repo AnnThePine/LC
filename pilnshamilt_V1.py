@@ -35,8 +35,8 @@ Sz = np.array(((1,0.0,0),
               (0,0,0),
               (0,0,-1)))
 
-g = 2.0028
-bora = 13.996
+
+g_bora = 28.03*0.1
 
 
 
@@ -50,7 +50,7 @@ def ipasvertibas(Bx, By, Bz):
     SDS = Dxx * (Sx @ Sx) + Dyy * (Sy @ Sy) + Dzz * (Sz @ Sz)
 
     # electron Zeeman (MHz)
-    Zeeman = g * bora * (Bz*Sz + Bx*Sx + By*Sy)
+    Zeeman = g_bora * (Bz*Sz + Bx*Sx + By*Sy)
 
     # full electron part in full space
     H_elec_full = np.kron(SDS + Zeeman, I_n)
@@ -207,7 +207,7 @@ def grad_vect(alfa, beta):
     return v
 
 
-#plot(viens_centrs(grad_vect(0,0),0.0,150, True, False))
+plot(viens_centrs(grad_vect(0,0),0.0,1500   , True, False))
 
 
-plot(cetri_centri(grad_vect(0,0),0.0,150))
+#plot(cetri_centri(grad_vect(0,0),0.0,150))

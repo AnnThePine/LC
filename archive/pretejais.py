@@ -94,22 +94,7 @@ def cetri_centri(lauka_kompoentes, griezums = "100"):
 
     return odmr_signal, freq_range
 
-# def reverese(signal_data, start_guess=(0.0, 0.0, 0)):
-#     params = lmfit.Parameters()
-#     params.add('Bx', value=start_guess[0], min=-amplituda, max=amplituda)  # mT
-#     params.add('By', value=start_guess[1], min=-amplituda, max=amplituda)
-#     params.add('Bz', value=start_guess[2], min=-amplituda, max=amplituda)
 
-#     result = lmfit.minimize(
-#         lambda p: cetri_centri(p) - signal_data,
-#         params,
-#         method="leastsq",
-#         max_nfev=20000,
-#         xtol=1e-12,
-#         ftol=1e-12,
-#         gtol=1e-12
-#     )
-#     return result
 
 def reverese2(signal_data):
     best_result = None
