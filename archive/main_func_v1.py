@@ -10,7 +10,7 @@ platums = 2
 punkti = 5000
 
 mini = 2650
-maxi = 3100
+maxi = 3000
 
 # nuclear spin I = 1 operators (3x3)
 Ix = np.array(((0., 1, 0),
@@ -82,19 +82,17 @@ def ipasvertibas(Bx, By, Bz, Nx=2.0):
     return eigenvalues, eigenvectors
 
 
-def cetri_centri(sferiskas_koord, vajagrange = True, griezums="100", tikaienergijas = False):
+def cetri_centri(lauka_kompoentes, vajagrange = True, griezums="100", tikaienergijas = False):
 
     # Ja lauka_kompoentes ir lmfit Parameters objekts, izvelkam vērtības
-    if isinstance(sferiskas_koord, lmfit.parameter.Parameters):
-        sferiskas_koord = np.array([
-            sferiskas_koord['Bvert'].value,
-            sferiskas_koord['Bhor'].value,
-            sferiskas_koord['Babs'].value])
+    if isinstance(lauka_kompoentes, lmfit.parameter.Parameters):
+        lauka_kompoentes = np.array([
+            lauka_kompoentes['Bx'].value,
+            lauka_kompoentes['By'].value,
+            lauka_kompoentes['Bz'].value])
 
-    sferiskas_koord = np.array(sferiskas_koord)
+    lauka_kompoentes = np.array(lauka_kompoentes)
 
-    lauka_kompoentes = grad_vect(sferiskas_koord[0], sferiskas_koord[1])
-    lauka_kompoentes = lauka_kompoentes*sferiskas_koord[2]
     all_energijas = []
 
     if griezums == "100":
