@@ -169,6 +169,23 @@ def grad_vect(alfa, beta):
     return v
 
 
+def vect_grad(v):
+    x, y, z = v
+
+    print(x,y,z)
+    # compute length (magnitude)
+    r = np.sqrt(x**2 + y**2 + z**2)
+
+    alfa = np.arccos(z/r)             # radians
+    beta = np.arctan2(y, x)       # radians
+
+    # convert to degrees
+    alfa = np.rad2deg(alfa)
+    beta = np.rad2deg(beta)
+
+    return [alfa, beta, r]
+
+
 def plot(x,y):
     plt.plot(x,y)
     plt.show()
@@ -183,3 +200,11 @@ def sign_dati(freq_range, signal, prominence=0.05, distance=3, width=1):
     peak_intensities = signal[idx]
     return peak_frequencies, peak_intensities
 
+
+def Vid_kvadr(x,y):
+    if len(x) == len(y):
+        x=np.sort(x)
+        y=np.sort(y)
+        return (x-y)**2
+    else:
+        return np.inf()

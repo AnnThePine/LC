@@ -8,10 +8,10 @@ ik_pec_lenkis = 1
 tol = 1
 
 # Angle range limits
-alpha_min = -45
-alpha_max = 0
-beta_min = 0
-beta_max = 45
+alpha_min = -90
+alpha_max = 90
+beta_min = -90
+beta_max = 90
 
 vert = {
     "24":[],
@@ -93,6 +93,8 @@ for label, coords in vert.items():
     if i==2:
         break
 
+
+
 # ax.legend(title="Peak count bins", loc="upper left", bbox_to_anchor=(1.02, 1.0))
 # ax.set_title("Peak count groups on sphere")
 
@@ -101,6 +103,11 @@ for label, coords in vert.items():
 
 for i in grad:
     plt.scatter(i[0],i[1])
-plt.scatter(-25,22.5, color = "red")
+
+circle = plt.Circle([22.5,24.5],14, fill=False, color = 'red')
+print (circle)
+plt.gca().add_patch(circle)
+
+plt.scatter(22.5,24.5, color = "red")
 plt.show()
 
