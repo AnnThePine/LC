@@ -2,131 +2,157 @@ import numpy as np
 import pandas as pd 
 import lmfit
 import matplotlib.pyplot as plt
+import time
 
-from main_func import cetri_centri, sign_dati, grad_vect
+from main_func import cetri_centri, sign_dati, grad_vect, vect_grad, Vid_kvadr
 
 mini = 2650
 maxi = 3500
 amplituda = 50
+biaslauks = grad_vect(22.5,24.5)*46 
+galva_bias = 20
+galva = 5
 
-#ielādē tabulu
+# Read your CSV
 try:
-    field_lookup_df = pd.read_csv("field_lookup_table.csv")
+    ielasitais = pd.read_csv("field_lookup_table.csv")
 except FileNotFoundError:
     print("Lookup table not found. Please run the generation script first.")
     exit()
 
-def mekle(peaks):
+# Combine the first three columns into a tuple or string
+# Example: tuple
+coords = list(zip(
+    ielasitais.iloc[:, 0],  # alfa
+    ielasitais.iloc[:, 1],  # beta
+    ielasitais.iloc[:, 2]   # B
+))
 
-    target_peak_count = len(peaks)
+# Collect the rest of the columns into lists
+values = ielasitais.iloc[:, 4:].values.tolist()
 
-    filtered_by_count = field_lookup_df[field_lookup_df['peak_count'] == target_peak_count].copy()
+skaiti = ielasitais.iloc[:, 3].values.tolist()
+
+# Build the new DataFrame
+field_lookup_df = pd.DataFrame({
+    'coordinates': coords,
+    'values': values
+})
 
 
-    if filtered_by_count.empty:
-        print("No matching peak count found in the lookup table. Using random guesses.")
-        minejumi = np.random.uniform(-amplituda, amplituda, size=(3, 100))
-    else:
-        # 2. solis: Aprēķinām pīķu vērtību atbilstību katram minējumam
-        # `pandas` ielādē masīvu kā virkni, tāpēc mums tas ir jāpārveido
-        filtered_by_count['peak_values'] = filtered_by_count['peak_values'].apply(lambda x: np.array(eval(x)))
+def meklebias(peaks):
 
-        
-        def calculate_peak_error(row):
-            model_peaks = row['peak_values']
-            if len(model_peaks) != len(peaks):
-                return np.inf # Izslēdz minējumus ar nepareizu skaitu (lai gan tie jau ir filtrēti)
+    start = time.time()
 
-            # Aprēķina vidējo kvadrātisko atlikumu starp pīķiem
-            residuals = np.sum((model_peaks - peaks)**2)
-            return residuals
+    df = field_lookup_df
 
-        filtered_by_count['error'] = filtered_by_count.apply(calculate_peak_error, axis=1)
+    resid = []
+    for i in range(len(df)):
+        if len(peaks)== skaiti[i]:
+            resid.append(np.sum(Vid_kvadr(df.iloc[i, 1],peaks)))
+        else:
+            resid.append(np.inf)
+    
+    df.loc[:,'vid kludas'] = resid 
 
-        # 3. solis: Izvēlamies labākos minējumus ar zemāko kļūdu
-        best_guesses_df = filtered_by_count.sort_values(by='error').head(100) # Ņemam top 100 labākos minējumus
-        minejumi = best_guesses_df[['Bx', 'By', 'Bz']].values.T
 
-# Definējam residual funkciju, kas ir nepieciešama lmfit
+    sarindots = df.sort_values('vid kludas', ascending=True)
+
+    top = sarindots.head(galva_bias)
+
+    top_vert = top.iloc[:, 0]
+
+    #return top.iloc[0, 0]
+
     def residual_func(p):
         model_energies = cetri_centri(
-            [p['Bx'], p['By'], p['Bz']],
+            [p['Alfa_vert'], p['Beta_vert'], p['Babs']],
             vajagrange=False,
             tikaienergijas=True
         )
-        model_energies = np.array(model_energies)
-        model_energies = model_energies[(model_energies >= mini) & (model_energies <= maxi)]
-        model_energies.sort()
-        
-        # apvieno tuvus pīķus
-        merged_peaks = []
-        if len(model_energies) > 0:
-            current_peak = model_energies[0]
-            count = 1
-            for i in range(1, len(model_energies)):
-                if abs(model_energies[i] - current_peak) < 2.0:
-                    current_peak = (current_peak * count + model_energies[i]) / (count + 1)
-                    count += 1
-                else:
-                    merged_peaks.append(current_peak)
-                    current_peak = model_energies[i]
-                    count = 1
-            merged_peaks.append(current_peak)
-        
-        model_peaks = np.array(merged_peaks)
-        
-        # --- Ja pīķu skaits nesakrīt, dodam lielu kļūdu
-        if len(model_peaks) != len(peaks):
-            return np.full(len(peaks), 1e6)
-        
-        # --- Ja skaits sakrīt: sakārtojam un salīdzinām 1:1
-        model_peaks_sorted = np.sort(model_peaks)
-        peaks_sorted = np.sort(peaks)
-        
-        residuals = model_peaks_sorted - peaks_sorted
+
+        # ja nepareizs garums vai NaN → sods
+        if (len(model_energies) != len(peaks)) or np.any(np.isnan(model_energies)):
+            return np.ones(len(peaks)) * 1e9
+
+        residuals = Vid_kvadr(model_energies, peaks)
+
+        if np.any(np.isnan(residuals)):
+            return np.ones(len(peaks)) * 1e9
+
         return residuals
-
-
+    
     results = []
-    for guess in minejumi.T:  # paņemam 5 labākos
+    for guess in top_vert:
         params = lmfit.Parameters()
-        params.add('Bx', value=guess[0], min=-amplituda, max=amplituda)
-        params.add('By', value=guess[1], min=-amplituda, max=amplituda)
-        params.add('Bz', value=guess[2], min=-amplituda, max=amplituda)
+
+
+        params.add('Alfa_vert', value=guess[0], min=0, max=70) 
+        params.add('Beta_vert', value=guess[1], min=-90, max=90) #rokas nost nemainam bias
+        params.add('Babs', value=guess[2], min=0, max=100)
 
         result = lmfit.minimize(
-            residual_func, 
+            residual_func,
             params,
-            method="leastsq",
-            ftol=1e-10, xtol=1e-10
+            method="least_squares",      # uses scipy.optimize.least_squares
+            loss='linear',               # pure least squares
+            ftol=1e-10, xtol=1e-10, gtol=1e-10,
+            max_nfev=20000               # allow more evaluations
         )
         results.append(result)
 
+
     # izvēlamies labāko
     best_result = min(results, key=lambda r: r.chisqr)
-    return best_result, list(best_result.params.valuesdict().values())
+
+    end = time.time()
+    print(f"laiks: {end - start}")
+    laiks = end - start
+
+    return best_result,laiks, list(best_result.params.valuesdict().values())
 
 
 def letstrythisshit(alfa, beta, mag):
-    #lauks = grad_vect(alfa, beta)*mag #g
-    lauks = [6.0,19.5,9.5]
-    print(lauks)
+    arlauks = grad_vect(alfa,beta)*mag
+
+    koplauks = biaslauks+arlauks
+
+    lauks = vect_grad(arlauks)
+
+    print(f"īstais lauks: {lauks}")
+
     freq, odmr = cetri_centri(lauks)
 
     peaks, peaky = sign_dati(freq, odmr)
 
-    res,_ = mekle(peaks)
+    res,laiks,_ = meklebias(peaks)
 
     params = list(res.params.valuesdict().values())
+    print(f"rezultats: {params}")
+    starp = []
+    for i in range(3):
+        starp.append(lauks[i]-params[i])
+    print(f"starpiba: {starp}")
     modfreq, mododmr = cetri_centri(params)
-    print(params)
 
-    plt.plot(freq, odmr, label="simulated")
-    plt.plot(modfreq, mododmr, label = "guessed")
-    plt.scatter(peaks, peaky)
-    plt.legend()
-    plt.show()
+    rezlauks = (grad_vect(params[0], params[1])*params[2]) - biaslauks
 
-letstrythisshit(30,20, 30)
+
+    #modfreq, mododmr = cetri_centri(res)
+
+    # plt.plot(freq, odmr, label="simulated")
+    # plt.plot(modfreq, mododmr, label = "guessed")
+    # plt.scatter(peaks, peaky)
+    # plt.legend()
+    # plt.show()
+
+    return([[alfa, beta, mag],params, starp, laiks])
+
+
+letstrythisshit(30,20, 10)
+#līdz 11.2 G
+
+
+# def sweep():
 
 

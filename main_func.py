@@ -207,4 +207,4 @@ def Vid_kvadr(x,y):
         y=np.sort(y)
         return (x-y)**2
     else:
-        return np.inf()
+        return np.inf

@@ -9,7 +9,8 @@ from main_func import cetri_centri, sign_dati, grad_vect, vect_grad, Vid_kvadr
 mini = 2650
 maxi = 3500
 amplituda = 50
-biaslauks = grad_vect(22.5,24.5)*46 #gsd
+biaslauks = grad_vect(22.5,24.5)*46 
+galva = 20
 
 # Read your CSV
 try:
@@ -27,7 +28,9 @@ coords = list(zip(
 ))
 
 # Collect the rest of the columns into lists
-values = ielasitais.iloc[:, 3:].values.tolist()
+values = ielasitais.iloc[:, 4:].values.tolist()
+
+skaiti = ielasitais.iloc[:, 3].values.tolist()
 
 # Build the new DataFrame
 field_lookup_df = pd.DataFrame({
@@ -44,14 +47,17 @@ def mekle(peaks):
 
     resid = []
     for i in range(len(df)):
-        resid.append(np.sum(Vid_kvadr(df.iloc[i, 1],peaks)))
+        if len(peaks)== skaiti[i]:
+            resid.append(np.sum(Vid_kvadr(df.iloc[i, 1],peaks)))
+        else:
+            resid.append(np.inf)
     
     df.loc[:,'vid kludas'] = resid 
 
 
     sarindots = df.sort_values('vid kludas', ascending=True)
 
-    top = sarindots.head(5)
+    top = sarindots.head(galva)
 
     top_vert = top.iloc[:, 0]
 
@@ -59,7 +65,7 @@ def mekle(peaks):
 
     def residual_func(p):
         model_energies = cetri_centri(
-            [p['Bvert'], p['Bhor'], p['Babs']],
+            [p['Alfa_vert'], p['Beta_vert'], p['Babs']],
             vajagrange=False,
             tikaienergijas=True
         )
@@ -70,12 +76,10 @@ def mekle(peaks):
     results = []
     for guess in top_vert:
         params = lmfit.Parameters()
-        # params.add('Bvert', value=guess[0], min=11.5, max=37.5) #vajadzēja +-13
-        # params.add('Bhor', value=guess[1], min=9.5, max=35.5)
-        # params.add('Babs', value=guess[2], min=52.8, max=75.2)
 
-        params.add('Bvert', value=guess[0], min=-90, max=90) #vajadzēja +-13
-        params.add('Bhor', value=guess[1], min=-90, max=90)
+
+        params.add('Alfa_vert', value=guess[0], min=0, max=70) 
+        params.add('Beta_vert', value=guess[1], min=-90, max=90) #rokas nost nemainam bias
         params.add('Babs', value=guess[2], min=0, max=100)
 
         result = lmfit.minimize(
@@ -105,6 +109,8 @@ def letstrythisshit(alfa, beta, mag):
     koplauks = biaslauks+arlauks
 
     lauks = vect_grad(koplauks)
+
+    print(f"īstais lauks: {lauks}")
 
     freq, odmr = cetri_centri(lauks)
 
