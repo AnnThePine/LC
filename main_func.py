@@ -131,11 +131,33 @@ def cetri_centri(sferiskas_koord, vajagrange = True, griezums="100", tikaienergi
     all_energijas = np.concatenate(all_energijas)
 
     if tikaienergijas:
-        ener = []
-        for e in all_energijas:
-            if mini<=e<=maxi:
-                ener.append(e)
-        return ener
+        ener = [e for e in all_energijas if mini <= e <= maxi]
+
+        if len(ener) == 0:
+            print("kaut kas nogāja galīgi garām")
+            return []
+
+        # Sakārto pēc lieluma, lai vieglāk apvienot
+        ener.sort()
+
+        merged_peaks = []
+        current_group = [ener[0]]
+
+        for e in ener[1:]:
+            if abs(e - current_group[-1]) <= 3.0:
+                current_group.append(e)
+            else:
+                avg = sum(current_group) / len(current_group)
+                merged_peaks.append(avg)
+                current_group = [e]
+
+        # pievieno pēdējo grupu
+        if current_group:
+            avg = sum(current_group) / len(current_group)
+            merged_peaks.append(avg)
+
+        return merged_peaks
+
     else:
 
         #maxi = np.max(all_energijas) + 20

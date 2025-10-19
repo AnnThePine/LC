@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from main_func import cetri_centri, sign_dati
 
-lauks = 46
+lauks = 45
 ik_pec_lenkis = 1
 tol = 1
 
@@ -18,7 +18,8 @@ vert = {
     "23":[],
     "22-21":[],
     "20-15":[],
-    "15-10":[],
+    "15-11":[],
+    "10":[],
     "under 10":[]
 } 
 
@@ -63,8 +64,10 @@ for alpha in range(alpha_min, alpha_max, ik_pec_lenkis):
             vert["22-21"].append(coords)
         elif 15 <= gar <= 20:
             vert["20-15"].append(coords)
-        elif 10 <= gar <= 15:
-            vert["15-10"].append(coords)
+        elif 11 <= gar <= 15:
+            vert["15-11"].append(coords)
+        elif gar==10:
+            vert["10"].append(coords)
         else:
             vert["under 10"].append(coords)
 
@@ -82,7 +85,7 @@ for label, coords in vert.items():
 
     alphagrad = alphas  * 180.0/np.pi
     betagrad = betas *180.0/np.pi
-    grad.append((alphagrad,betagrad))
+    grad.append((alphagrad,betagrad, label))
     # spherical → Cartesian (radius = 30 for visibility)
     x = np.cos(alphas) * np.cos(betas) * lauks
     y = np.cos(alphas) * np.sin(betas) * lauks
@@ -90,8 +93,7 @@ for label, coords in vert.items():
 
     #ax.scatter(x, y, z, s=20, label=label)
     i+=1
-    if i==2:
-        break
+
 
 
 
@@ -102,12 +104,9 @@ for label, coords in vert.items():
 # plt.show()
 
 for i in grad:
-    plt.scatter(i[0],i[1])
+    print(i)
+    plt.scatter(i[0],i[1], label = i[2])
 
-circle = plt.Circle([22.5,24.5],14, fill=False, color = 'red')
-print (circle)
-plt.gca().add_patch(circle)
-
-plt.scatter(22.5,24.5, color = "red")
+plt.legend()
 plt.show()
 
