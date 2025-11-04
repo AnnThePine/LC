@@ -5,7 +5,7 @@ from scipy.signal import find_peaks
 
 amplituda = 20
 
-platums = 2
+platums = 1.5
 
 punkti = 5000
 
@@ -31,8 +31,8 @@ Q = -4.96       # MHz
 gamma_N = 0.3077e-3  # MHz/G   (0.3077 kHz/G)
 
 
-agparal = -1.7 #MHz būs param , maina videjo piki
-agper = -7 #MHz būs param, maina attālumu starp mazajām energijām
+# agparal = -1.7 #MHz būs param , maina videjo piki
+# agper = -7 #MHz būs param, maina attālumu starp mazajām energijām
 
 
 Sx = np.array(((0.,1,0),
@@ -47,10 +47,13 @@ Sz = np.array(((1,0.0,0),
               (0,0,0),
               (0,0,-1)))
 
+agper = -2.7 #Mhz 14N
+agparal = -2.14
+
 g_bora = 28.03*0.1
 
 
-def ipasvertibas(Bx, By, Bz, Nx=2.0):
+def ipasvertibas(Bx, By, Bz, Mx, My, Mz):
     I_n = np.eye(3)  # nuclear identity (3x3)
     
     # electron zero-field splitting (MHz)
@@ -62,13 +65,13 @@ def ipasvertibas(Bx, By, Bz, Nx=2.0):
     Zeeman = g_bora * (Bz*Sz + Bx*Sx + By*Sy)
 
     # strain term (MHz)  --- new
-    Strain = Nx * (Sx @ Sz + Sz @ Sx)
+    Strain = Mz*(Sz@Sz)+Mx*(Sx@Sx-Sy@Sy)+My*(Sx@Sy+Sy@Sx)
 
     # full electron part in full space (3 electron ⊗ 3 nuclear = 9x9)
-    H_elec_full = np.kron(SDS + Zeeman + Strain, I_n)
+    H_elec_full = np.kron(SDS + Zeeman + Strain+Q * (Iz @ Iz), I_n)
 
     # nuclear-only part (MHz)
-    H_nuc = Q * (Iz @ Iz) - gamma_N * (Bx*Ix + By*Iy + Bz*Iz)
+    H_nuc = - gamma_N * (Bx*Ix + By*Iy + Bz*Iz)
     H_nuc_full = np.kron(np.eye(3), H_nuc)
 
     # hyperfine interaction (MHz)
@@ -81,8 +84,16 @@ def ipasvertibas(Bx, By, Bz, Nx=2.0):
     eigenvalues, eigenvectors = np.linalg.eigh(Hamiltonian)
     return eigenvalues, eigenvectors
 
+def M_components(sigma_nv, a1,a2,b,c):
+    sxx, syy, szz = sigma_nv[0,0], sigma_nv[1,1], sigma_nv[2,2]
+    sxy, sxz, syz = sigma_nv[0,1], sigma_nv[0,2], sigma_nv[1,2]
+    Mx = b*(2*szz - sxx - syy) + c*(2*sxy - syz - sxz)
+    My = np.sqrt(3)*b*(sxx - syy) + np.sqrt(3)*c*(syz - sxz)
+    Mz = a1*(sxx + syy + szz) + 2*a2*(syz + sxz + sxy)
+    return Mx, My, Mz
 
-def cetri_centri(sferiskas_koord, vajagrange = True, griezums="100", tikaienergijas = False):
+
+def cetri_centri(sferiskas_koord, stress_dir, P,a1,a2,b,c, vajagrange = True, griezums="100", tikaienergijas = False):
 
     # Ja lauka_kompoentes ir lmfit Parameters objekts, izvelkam vērtības
     if isinstance(sferiskas_koord, lmfit.parameter.Parameters):
@@ -90,8 +101,14 @@ def cetri_centri(sferiskas_koord, vajagrange = True, griezums="100", tikaienergi
             sferiskas_koord['Bvert'].value,
             sferiskas_koord['Bhor'].value,
             sferiskas_koord['Babs'].value])
-
+        
+    
     sferiskas_koord = np.array(sferiskas_koord)
+
+    # drošības pārbaude, lai redzētu, ja saņem nepareizu formu
+    if sferiskas_koord.size < 3:
+        raise ValueError(f"sferiskas_koord jāsatur 3 vērtības (vert, hor, abs). Saņemts: {sferiskas_koord}")
+
 
     lauka_kompoentes = grad_vect(sferiskas_koord[0], sferiskas_koord[1])
     lauka_kompoentes = lauka_kompoentes*sferiskas_koord[2]
@@ -117,18 +134,32 @@ def cetri_centri(sferiskas_koord, vajagrange = True, griezums="100", tikaienergi
                               np.cross(nvcentri[1, :], nvcentrix[1, :]),
                               np.cross(nvcentri[2, :], nvcentrix[2, :]),
                               np.cross(nvcentri[3, :], nvcentrix[3, :])])
+        
 
         # Aprēķina enerģijas katram centram un apkopo kopā
         for NV in range(4):
+
+            R_k = np.vstack([nvcentrix[NV], nvcentriy[NV], nvcentri[NV]])
+
+            sigma = P * np.outer(stress_dir, stress_dir)
+
+            sigma_nv = R_k @ sigma @ R_k.T
+
+            Mx, My, Mz = M_components(sigma_nv, a1,a2,b,c)
+
             nvkomp = np.array([
                 np.dot(nvcentrix[NV, :], lauka_kompoentes),
                 np.dot(nvcentriy[NV, :], lauka_kompoentes),
                 np.dot(nvcentri[NV, :], lauka_kompoentes)])
-            en, _ = ipasvertibas(*nvkomp)
+            en, _ = ipasvertibas(*nvkomp,Mx, My, Mz)
             energijas = en[1:] - en[0]
             all_energijas.append(energijas)
 
+        
+
     all_energijas = np.concatenate(all_energijas)
+
+    #strain virzieni
 
     if tikaienergijas:
         ener = [e for e in all_energijas if mini <= e <= maxi]
@@ -143,13 +174,13 @@ def cetri_centri(sferiskas_koord, vajagrange = True, griezums="100", tikaienergi
         merged_peaks = []
         current_group = [ener[0]]
 
-        for e in ener[1:]:
-            if abs(e - current_group[-1]) <= 3.0:
-                current_group.append(e)
+        for ee in ener[1:]:
+            if abs(ee - current_group[-1]) <= 3.0:
+                current_group.append(ee)
             else:
                 avg = sum(current_group) / len(current_group)
                 merged_peaks.append(avg)
-                current_group = [e]
+                current_group = [ee]
 
         # pievieno pēdējo grupu
         if current_group:
@@ -213,7 +244,7 @@ def plot(x,y):
     plt.show()
 
 
-def sign_dati(freq_range, signal, prominence=0.05, distance=3, width=1):
+def sign_dati(freq_range, signal, prominence=0.05, distance=3, width=0.8):
     idx, props = find_peaks(signal,
                             prominence=prominence,
                             distance=distance,
