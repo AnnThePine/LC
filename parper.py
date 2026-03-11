@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import glob
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 import lmfit
 from scipy.signal import find_peaks
 
@@ -33,8 +32,8 @@ peak3 = []
 #for m in pirm:
 for d in rang:
 
-        freq, odmr = cetri_centri([59.578947368421055, 19.620689655172413, 5], [1,1,1],0.03,d,4,0,5) #+_30 mpa = 0,03 gpa
-        #c maina augšējo enerģ, d simetriska pret 0, noliec uz leju en., a2 does wied shit, a1 vnk pārbīda uz augšu
+        freq, odmr = cetri_centri([59.578947368421055, 19.620689655172413, 5], [1,1,1],0.03,d,0,0,0) #+_30 mpa = 0,03 gpa
+        #c maina augšējo enerģ, d simetriska pret 0, noliec uz leju en., a2 does wied shit, a1 - bīda pa labi, + energijas pa kreisi
 
         pea = sign_dati(freq, odmr)
         peaks = pea[0]
@@ -68,3 +67,7 @@ plt.grid(True)
 plt.legend()
 plt.tight_layout()
 plt.show()
+
+
+
+

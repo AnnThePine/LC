@@ -25,7 +25,7 @@ Iz = np.array(((1, 0., 0),
                (0, 0., 0),
                (0, 0., -1)))
 
-D = 2870.0  # MHz
+D = 2850.0  # MHz
 
 Q = -4.96       # MHz
 gamma_N = 0.3077e-3  # MHz/G   (0.3077 kHz/G)
@@ -52,37 +52,72 @@ agparal = -2.14
 
 g_bora = 28.03*0.1
 
+Sx2 = Sx @ Sx
+Sy2 = Sy @ Sy
+Sz2 = Sz @ Sz
 
-def ipasvertibas(Bx, By, Bz, Mx, My, Mz):
-    I_n = np.eye(3)  # nuclear identity (3x3)
-    
+Sxy = Sx@Sy
+Syx = Sy@Sx
+
+Mxx = Sx2-Sy2
+Myy = Sxy+Syx
+
+I_n = np.eye(3)
+
+SIz = np.kron(Sz, Iz)
+SI = np.kron(Sx, Ix) + np.kron(Sy, Iy)
+
+# NV centru virzieni 54.7 grādu leņķī
+nvcentri = np.array([[-1, -1, 1],
+                        [1, 1, 1],
+                        [-1, 1, -1],
+                        [1, -1, -1]]) / np.sqrt(3)
+
+# Aprēķina divus vienības vektorus, kas ir perpendikulāri nvcentriem
+nvcentrix = np.array([np.cross(nvcentri[0, :], nvcentri[1, :]),
+                        np.cross(nvcentri[0, :], nvcentri[1, :]),
+                        np.cross(nvcentri[2, :], nvcentri[3, :]),
+                        np.cross(nvcentri[2, :], nvcentri[3, :])])
+
+for i in range(4):
+    nvcentrix[i, :] /= np.linalg.norm(nvcentrix[i, :])
+
+nvcentriy = np.array([np.cross(nvcentri[0, :], nvcentrix[0, :]),
+                        np.cross(nvcentri[1, :], nvcentrix[1, :]),
+                        np.cross(nvcentri[2, :], nvcentrix[2, :]),
+                        np.cross(nvcentri[3, :], nvcentrix[3, :])])
+
+def ipasvertibas(Bx, By, Bz, Mx, My, Mz,D, nuclear = True):
+    # nuclear identity (3x3)
+
     # electron zero-field splitting (MHz)
     Dzz = D * 2 / 3
     Dxx = Dyy = -Dzz / 2
-    SDS = Dxx * (Sx @ Sx) + Dyy * (Sy @ Sy) + Dzz * (Sz @ Sz)
+    SDS = Dxx * (Sx2) + Dyy * (Sy2) + Dzz * (Sz2)
 
     # electron Zeeman (MHz)
-    Zeeman = g_bora * (Bz*Sz + Bx*Sx + By*Sy)
+    Zeeman  = g_bora * (Bz*Sz + Bx*Sx + By*Sy)
 
     # strain term (MHz)  --- new
-    Strain = Mz*(Sz@Sz)+Mx*(Sx@Sx-Sy@Sy)+My*(Sx@Sy+Sy@Sx)
+    Strain = Mz*(Sz2)+Mx*Mxx+My*Myy
 
     # full electron part in full space (3 electron ⊗ 3 nuclear = 9x9)
-    H_elec_full = np.kron(SDS + Zeeman + Strain+Q * (Iz @ Iz), I_n)
-
+    H_elec_full = SDS + Zeeman + Strain
+    if nuclear:
     # nuclear-only part (MHz)
-    H_nuc = - gamma_N * (Bx*Ix + By*Iy + Bz*Iz)
-    H_nuc_full = np.kron(np.eye(3), H_nuc)
+        H_nuc = - gamma_N * (Bx*Ix + By*Iy + Bz*Iz)
+
+        H_nuc_full = np.kron(I_n, H_nuc)
 
     # hyperfine interaction (MHz)
-    H_hyperfine = (
-        agparal * np.kron(Sz, Iz) +
-        agper   * (np.kron(Sx, Ix) + np.kron(Sy, Iy))
-    )
+        H_hyperfine = (agparal * SIz + agper   * SI)
 
-    Hamiltonian = H_elec_full + H_nuc_full + H_hyperfine
-    eigenvalues, eigenvectors = np.linalg.eigh(Hamiltonian)
-    return eigenvalues, eigenvectors
+        Hamiltonian = np.kron(H_elec_full, I_n) + H_nuc_full + H_hyperfine
+    else:
+        Hamiltonian = H_elec_full
+    #print(Hamiltonian)
+    eigenvalues = np.linalg.eigvalsh(Hamiltonian)
+    return eigenvalues
 
 def M_components(sigma_nv, a1,a2,b,c):
     sxx, syy, szz = sigma_nv[0,0], sigma_nv[1,1], sigma_nv[2,2]
@@ -93,7 +128,7 @@ def M_components(sigma_nv, a1,a2,b,c):
     return Mx, My, Mz
 
 
-def cetri_centri(sferiskas_koord, stress_dir, P,a1,a2,b,c, vajagrange = True, griezums="100", tikaienergijas = False):
+def cetri_centri(sferiskas_koord, D, dirrr = [1,0], P=0.03,a1 = 5,a2= -3,b = -2,c =7, vajagrange = True, griezums="100", tikaienergijas = False):
 
     # Ja lauka_kompoentes ir lmfit Parameters objekts, izvelkam vērtības
     if isinstance(sferiskas_koord, lmfit.parameter.Parameters):
@@ -115,27 +150,8 @@ def cetri_centri(sferiskas_koord, stress_dir, P,a1,a2,b,c, vajagrange = True, gr
     all_energijas = []
 
     if griezums == "100":
-        # NV centru virzieni 54.7 grādu leņķī
-        nvcentri = np.array([[-1, -1, 1],
-                             [1, 1, 1],
-                             [-1, 1, -1],
-                             [1, -1, -1]]) / np.sqrt(3)
-
-        # Aprēķina divus vienības vektorus, kas ir perpendikulāri nvcentriem
-        nvcentrix = np.array([np.cross(nvcentri[0, :], nvcentri[1, :]),
-                              np.cross(nvcentri[0, :], nvcentri[1, :]),
-                              np.cross(nvcentri[2, :], nvcentri[3, :]),
-                              np.cross(nvcentri[2, :], nvcentri[3, :])])
-
-        for i in range(4):
-            nvcentrix[i, :] /= np.linalg.norm(nvcentrix[i, :])
-
-        nvcentriy = np.array([np.cross(nvcentri[0, :], nvcentrix[0, :]),
-                              np.cross(nvcentri[1, :], nvcentrix[1, :]),
-                              np.cross(nvcentri[2, :], nvcentrix[2, :]),
-                              np.cross(nvcentri[3, :], nvcentrix[3, :])])
         
-
+        stress_dir = grad_vect(*dirrr)
         # Aprēķina enerģijas katram centram un apkopo kopā
         for NV in range(4):
 
@@ -151,7 +167,7 @@ def cetri_centri(sferiskas_koord, stress_dir, P,a1,a2,b,c, vajagrange = True, gr
                 np.dot(nvcentrix[NV, :], lauka_kompoentes),
                 np.dot(nvcentriy[NV, :], lauka_kompoentes),
                 np.dot(nvcentri[NV, :], lauka_kompoentes)])
-            en, _ = ipasvertibas(*nvkomp,Mx, My, Mz)
+            en = ipasvertibas(*nvkomp,Mx, My, Mz, D)
             energijas = en[1:] - en[0]
             all_energijas.append(energijas)
 
@@ -163,6 +179,7 @@ def cetri_centri(sferiskas_koord, stress_dir, P,a1,a2,b,c, vajagrange = True, gr
 
     if tikaienergijas:
         ener = [e for e in all_energijas if mini <= e <= maxi]
+        #ener = all_energijas
 
         if len(ener) == 0:
             print("kaut kas nogāja galīgi garām")
@@ -244,20 +261,31 @@ def plot(x,y):
     plt.show()
 
 
-def sign_dati(freq_range, signal, prominence=0.05, distance=3, width=0.8):
+def sign_dati(freq_range, signal, prominence=0.1, distance=3, width=0.8):
     idx, props = find_peaks(signal,
                             prominence=prominence,
                             distance=distance,
                             width=width)
     peak_frequencies = freq_range[idx]
     peak_intensities = signal[idx]
-    return peak_frequencies, peak_intensities
 
+    # Filtrs: tikai pīķi, kas lielāki par 1/5 no lielākā pīķa
+    mask = peak_intensities > peak_intensities.max() / 5
 
-def Vid_kvadr(x,y):
+    frequencies = peak_frequencies[mask]
+    intensities = peak_intensities[mask]
+
+    return frequencies.tolist(), intensities.tolist()
+
+def Vid_kvadr(x,y,square = True):
     if len(x) == len(y):
-        x=np.sort(x)
-        y=np.sort(y)
-        return (x-y)**2
+        if square:
+            x=np.sort(x)
+            y=np.sort(y)
+            return (x-y)**2
+        else:
+            x=np.sort(x)
+            y=np.sort(y)
+            return (x-y)**6
     else:
         return np.inf

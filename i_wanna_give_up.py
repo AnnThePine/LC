@@ -4,6 +4,9 @@ import lmfit
 import matplotlib.pyplot as plt
 import time
 import itertools
+from scipy.spatial import KDTree
+from scipy.optimize import minimize
+from scipy.optimize import minimize_scalar
 
 from main_func import cetri_centri, sign_dati, grad_vect, vect_grad, Vid_kvadr
 
@@ -20,13 +23,21 @@ maxalfa = 85
 minB = 5
 maxB = 500
 
+matrix = np.array([[0, 1,1], [1, 1,1],[-1, 0,1],[0,0,1], [1, 0,1],[-1, -1,1],[0, -1,1], [1, -1,1],
+              [-1, 1,0], [0, 1,0], [1, 1,0],[-1, 0,0],[0,0,0], [1, 0,0],[-1, -1,0], [0, -1,0], [1, -1,0],
+              [-1, 1,-1], [0, 1,-1], [1, 1,-1],[-1, 0,-1],[0,0,-1], [1, 0,-1],[-1, -1,-1], [0, -1,-1], [1, -1,-1]])
+x0 = np.array([0,0,0.03])
 
-
+bounds = [
+    (0, np.pi),          # theta
+    (0, 2*np.pi),        # phi
+    (0.0, 0.1)           # strain magnitude
+]
 
 # Read your CSV
 try:
-    ielasitais = pd.read_csv("field_lookup_table1.csv")
-    testa_dati = pd.read_csv("merged_data0.csv")
+    ielasitais = pd.read_csv("field_lookup_table.csv")
+    testa_dati = pd.read_csv("merged_data_cursed.csv")
 except FileNotFoundError:
     print("Lookup table not found. Please run the generation script first.")
     exit()
@@ -47,111 +58,155 @@ coords = list(zip(
 ))
 
 # Collect the rest of the columns into lists
-values = ielasitais.iloc[:, 6:].apply(lambda row: row.dropna().tolist(), axis=1).tolist()
+values = ielasitais.iloc[:, 4:].apply(lambda row: row.dropna().tolist(), axis=1).tolist()
 
-skaiti = ielasitais.iloc[:, 5].astype(int).values.tolist()
-
-agpar = ielasitais.iloc[:, 4].astype(int).values.tolist()
-
-agper = ielasitais.iloc[:, 3].astype(int).values.tolist()
+skaiti = ielasitais.iloc[:, 3].astype(int).values.tolist()
 
 # Build the new DataFrame
 field_lookup_df = pd.DataFrame({
     'coordinates': coords,
-    "agpar": agpar,
-    "agper":agper,
     'values': values,
     'skaiti' : skaiti
 })
+
+values_by_length = {}
+coords_by_length = {}
+
+# Group rows by skaiti
+for L, group in field_lookup_df.groupby("skaiti"):
+    valss = np.stack(group['values'].values)          # (N, K)
+    coords_arr = np.stack(group['coordinates'].values)  # (N, 3)
+
+    values_by_length[L] = valss
+    coords_by_length[L] = np.asarray(group['coordinates'].tolist(), dtype=float)
+
+vals = values_by_length[L]      # NumPy array (N, K)
+coords = coords_by_length[L]
+
+tree_by_length = {L: KDTree(vals) for L, vals in values_by_length.items()}
+
+def calculate_Derror(D_val, p_coord, target_peaks):
+    # This is the logic you had inside your loop
+    energijas = sign_dati(*cetri_centri(p_coord, D=D_val, tikaienergijas=False, vajagrange=True))[0]
+    return np.sum(Vid_kvadr(energijas, target_peaks))
+
+def calculate_stresserr(rezult, rezd,x, peaks):
+
+    alfa,beta, P = x
+
+    energijas = sign_dati(*cetri_centri(rezult, D=rezd,dirrr=[alfa, beta],P=P, tikaienergijas=False, vajagrange=True))[0]
+    return np.sum(Vid_kvadr(energijas, peaks))
 
 def meklebias(peaks):
 
     start = time.time()
 
-    df = field_lookup_df[field_lookup_df['skaiti'] == len(peaks)].reset_index(drop=True)
+    L = len(peaks)
+    tree = tree_by_length.get(L)
 
+    if tree is None:
+        return None
     
+    indices = tree.query_ball_point(peaks, r=np.sqrt(5000))
 
-    resid = [np.sum(Vid_kvadr(row, peaks)) for row in df['values']]
-    df['vid kludas'] = resid
+    if not indices:
+        print("youre double fucked")
+        return None
     
-    so = df[df['vid kludas'] <= 50000]
+    dist, idx = tree.query(peaks, k=len(indices), distance_upper_bound=np.sqrt(5000))
     
-    top = so.sort_values('vid kludas', ascending=True)
-    
-    
-    if len(top) >= 10:
-        top = top.head()
+    mask = np.isfinite(dist)
+    resid_f = dist[mask]**2
+    coords_f = coords[idx[mask]]
 
-    top_vert = top.iloc[:, 0]
-    toppar = top.iloc[:, 1]
-    topper = top.iloc[:, 2]
-
-    matrix = [[-1, 1,1], [0, 1,1], [1, 1,1],[-1, 0,1],[0,0,1], [1, 0,1],[-1, -1,1],[0, -1,1], [1, -1,1],
-              [-1, 1,0], [0, 1,0], [1, 1,0],[-1, 0,0],[0,0,0], [1, 0,0],[-1, -1,0], [0, -1,0], [1, -1,0],
-              [-1, 1,-1], [0, 1,-1], [1, 1,-1],[-1, 0,-1],[0,0,-1], [1, 0,-1],[-1, -1,-1], [0, -1,-1], [1, -1,-1]]
+    if resid_f.size == 0:
+        print("youre double fucked")
+        return None
     
-    listp = [-1,0,1]
+    order = np.argsort(resid_f)
+    resid_sorted = resid_f[order]
+    coords_sorted = coords_f[order]
 
-    matrix5D = [list((*xyz, par, per)) for xyz, par, per in itertools.product(matrix, listp, listp)]
 
+    Dmekl = np.linspace(2860, 2880,20)
+
+
+    #pirmais D fits
+    gridmin = coords_sorted[1]
+    res = minimize_scalar(calculate_Derror, args=(gridmin, peaks), bounds=(2860, 2880), method='bounded',
+    options={'xatol': 0.00001} )
+    datr = res.x
     
-
     vert = []
     kludinas = []
     
-    if len(top_vert) != 0:
+    if coords_sorted.shape[0] != 0:
+        
+        # mag lauka fits un šķirošana
 
-        for i in range(len(top_vert)):
-            gridmin = top_vert.iloc[i]
-            parmin=toppar.iloc[i]
-            permin=topper.iloc[i]
-            
-            att = 4
+        for i in range(1,10):
+            gridmin =  coords_sorted[i].copy()
+            att = 2
             kluda = 0
             print(i)
             for a in range(10): 
-                matrixa = [[pair * att  for pair in row] for row in matrix5D]  
+                points = gridmin + matrix * att
                 kludas = []
-                for element in matrixa:
-                            energijas = sign_dati(*cetri_centri([gridmin[0]+element[0],gridmin[1]+element[1],gridmin[2]+element[2]],permin+element[3],parmin+element[4], tikaienergijas=False, vajagrange=True))
-                            kluda = np.sum(Vid_kvadr(energijas[0],peaks))
-                            kludas.append(kluda)
-                            g = kludas.index(min(kludas))
-                gatrix = matrixa[g]
-                if min(kludas) <= 80*att:
-                    gridmin = [gridmin[0]+gatrix[0],gridmin[1]+gatrix[1],gridmin[2]+gatrix[2]]
-                    parmin = parmin+gatrix[4]
-                    permin = permin+gatrix[3]
-                    att /=2
-                else: 
-                    print(f"apstajas pie: {abs(np.log2(att))+1}")
+                for p in points:
+                    energ = sign_dati(*cetri_centri(p, D=datr, tikaienergijas=False, vajagrange=True))[0]
+                    kludas.append(np.sum(Vid_kvadr(energ, peaks)))
+
+                # find best point index
+                best_idx = np.argmin(kludas)
+                best_point = points[best_idx]
+                best_error = kludas[best_idx]
+
+                # update gridmin ONCE
+                if best_error <= 10 * att:
+                    gridmin = best_point
+                    att /= 2
+                else:
+                    print(f"apstajas pie: {abs(np.log2(att)) + 1}")
                     beigu = att
-                    gridmin = [gridmin[0]+gatrix[0],gridmin[1]+gatrix[1],gridmin[2]+gatrix[2]]
-                    parmin = parmin+gatrix[4]
-                    permin = permin+gatrix[3]
                     break
-            vert.append([gridmin,parmin,permin])
-            kludinas.append(min(kludas))
-        z = kludinas.index(min(kludinas))
+            vert.append(gridmin)
+            kludinas.append(best_error)
+        z = np.argmin(kludinas)
         rezult = vert[z]
         
+        #otrais D fits 
+        res = minimize_scalar(calculate_Derror, args=(rezult, peaks), bounds=(datr-1, datr+1), method='bounded',
+        options={'xatol': 0.000001} )
+        rezd = res.x
 
-        att2 = beigu*16
+        #strrain virziens
+        res = minimize(calculate_stresserr,
+            x0=np.array(x0),
+            args=(rezult, rezd, peaks),
+            method='L-BFGS-B',
+            bounds=bounds,
+            options={
+                'xtol': 1e-6,
+                'ftol': 1e-6
+            }
+        )
 
-        # gridmin = rezult
+
+        att2 = beigu*2
+
+        gridmin = rezult
         
-        # for b in range(5):
-        #     kludas = []
-        #     matrixa = [[pair * att2  for pair in row] for row in matrix]  
-        #     for element in matrixa:
-        #         energijas = sign_dati(*cetri_centri([gridmin[0]+element[0],gridmin[1]+element[1],gridmin[2]+element[2]], tikaienergijas=False, vajagrange=True))
-        #         kluda = np.sum(Vid_kvadr(energijas[0],peaks))
-        #         kludas.append(kluda)
-        #     g = kludas.index(min(kludas))
-        #     gatrix = matrixa[g]
-        #     gridmin = [gridmin[0]+gatrix[0],gridmin[1]+gatrix[1],gridmin[2]+element[2]]
-        #     att2 /=2
+        for b in range(3):
+            kludas = []
+            matrixa = [[pair * att2  for pair in row] for row in matrix]  
+            for element in matrixa:
+                energijas = sign_dati(*cetri_centri([gridmin[0]+element[0],gridmin[1]+element[1],gridmin[2]+element[2]], D=rezd, tikaienergijas=False, vajagrange=True))
+                kluda = np.sum(Vid_kvadr(energijas[0],peaks,square = False))
+                kludas.append(kluda)
+                g = kludas.index(min(kludas))
+            gatrix = matrixa[g]
+            gridmin = [gridmin[0]+gatrix[0],gridmin[1]+gatrix[1],gridmin[2]+element[2]]
+            att2 /=2
             
 
 
@@ -159,12 +214,16 @@ def meklebias(peaks):
         #print(f"laiks: {end - start}")
         laiks = end - start
 
-        return rezult, laiks
+        return gridmin,rezd, laiks
     else: 
-        print(f"youre fucked\n{df}\nlen peaks{len(peaks)}")
+        print(f"youre fucked\nlen peaks{len(peaks)}")
         end = time.time()
         laiks = end - start
         return[0,0,0],laiks
+
+
+
+
 
 def letstrythisshit(alfa, beta, mag,  Print = False, graph = False):
     lauks = [alfa, beta, mag]
@@ -203,8 +262,6 @@ def letstrythisshit(alfa, beta, mag,  Print = False, graph = False):
         plt.show()
 
     return([[alfa, beta, mag],res, starp1, laiks])
-
-
 
 
 
@@ -250,19 +307,40 @@ def reali(testa_dati):
 
     peaks, peaky = sign_dati(freq, inverted_y)
 
-    rez,laiks = meklebias(peaks)
-    res = rez[0]
+    rez,d,laiks = meklebias(peaks)
+
+    #peaks = [z-peakss[0] for z in peakss]
+    try:
+        rez,d,laiks = meklebias(peaks)
+    except:
+        print("fuck")
+        plt.vlines(peaks,0,1, colors="red")
+        plt.plot(freq, inverted_y, label="real")
+        plt.xlim(2650,3100)
+        plt.legend()
+        plt.show()
 
 
-    print(f"rezultats: {rez}")
+    print(f"rezultats: {rez, d}")
     print(f"Laiks: {laiks}")
 
-    modfreq, mododmr = cetri_centri(*rez)
+    modfreq, mododmr = cetri_centri(rez,d)
     plt.figure(figsize=(10, 6))
+    
+    rezfr,_ = sign_dati(modfreq, mododmr)
+
+    plt.vlines(peaks,0,1, colors="red")
     plt.plot(freq, inverted_y, label="real")
-    plt.plot(modfreq, mododmr, label = "guessed")
-    plt.scatter(peaks, peaky)
+    plt.vlines(rezfr,0,1, colors="red")
+    plt.plot(modfreq, mododmr, label = "guessed")   
+    plt.xlim(2650,3100)
     plt.legend()
+    plt.show()
+
+    starp = np.array(peaks) - np.array(rezfr)
+
+    plt.figure(figsize=(10, 6))
+    plt.scatter(peaks, starp)
     plt.show()
 
 reali(testa_dati)
