@@ -1,41 +1,51 @@
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FormatStrFormatter
 import numpy as np
-from main_func import cetri_centri, ipasvertibas
+from main_func import cetri_centri, ipasvertibas, Plane_stress_tensor, Aproximated_stress,dT_to_D,Stress_tensor
 
 plt.figure(figsize=(7,4))
 
-bval = np.linspace(0,0.1, 30)
-D= [2850.0,2850.0+7.5]
-num = [0,1]
+bval = np.linspace(0.001,10, 30)
+D= 2850.0
+Temp = [0,1]
 col = ["red", "green"]
 aa = []
 bb = []
-for a in num:
-    vals = []
+cc=[]
+alfa = np.deg2rad(0)
+theta = np.deg2rad(0)
+
+for dT in Temp:
+    valsa = []
+    valb = []
     for b in bval:
-        lvls = ipasvertibas(0,0,b,-0.0, 0, 0, D[a],nuclear=False)
-        vals.append(lvls)
-    vals = np.array(vals, dtype=np.float64)
-    pirm = vals[:, 1] - vals[:, 0]
-    otr  = vals[:, 2] - vals[:, 0]
+        bx=b*np.sin(alfa)+b*np.cos(theta)
+        by=b*np.cos(alfa)+b*np.cos(theta)
+        bz=b*np.cos(alfa)
+        mxa,mya,mza = Aproximated_stress(dT)
+        mxb,myb, mzb, nxb,nyb = Stress_tensor(1,1,1,1,1,1)
+        lvlsa = ipasvertibas(bx,by,bz,D+dT_to_D(dT),mxa,mya,mza,nuclear=False)
+        lvlsb = ipasvertibas(bx,by,bz,D+dT_to_D(dT),mxb,myb, mzb,nuclear=False) # Nx=nxb,Ny=nyb
+        valb.append(lvlsb)
+        valsa.append(lvlsa)
+    valsa = np.array(valsa, dtype=np.float64)
+    valb = np.array(valb, dtype=np.float64)
+    pirm = valsa[:, 1] - valsa[:, 0]
+    otr  = valsa[:, 2] - valsa[:, 0]
     bb.append(pirm)
     bb.append(otr)
-    aa.append(vals[:, 2] - vals[:, 1])
-    print(aa)
+    aa.append(valsa[:, 2] - valsa[:, 1])
+    cc.append(valb[:, 2] - valb[:, 1])
 aa.append(aa[0]-aa[1])
-print("min/max gap21:", vals.min(), vals.max())
-print(aa[2])
-plt.plot(bval, aa[2],linewidth = 5, label = "reference temp")
+cc.append(cc[0]-cc[1])
+plt.plot(bval, aa[2], label = "reference temp")
+plt.plot(bval, cc[2], label = "without temperature strain relation")
 plt.plot(bval,-bb[0]+bb[2])
 plt.plot(bval,-bb[1]+bb[3])
-
+plt.yscale("log")
 plt.ylabel("Energy, GHz")
-plt.ticklabel_format(useOffset=False)
 plt.xlabel("B,T")
 plt.grid()
-#plt.gca().yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
 plt.title("100K temperature difference in transition energy difference",fontweight='bold')
-# plt.legend()
+plt.legend()
 plt.tight_layout()
 plt.show()

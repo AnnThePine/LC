@@ -52,6 +52,10 @@ agparal = -2.14
 
 g_bora = 28.03*0.1
 
+alfa_const_dim = 1.06*10e-6#1/K
+
+C = 1076+125-((2*125^2)/1076)
+
 Sx2 = Sx @ Sx
 Sy2 = Sy @ Sy
 Sz2 = Sz @ Sz
@@ -59,8 +63,17 @@ Sz2 = Sz @ Sz
 Sxy = Sx@Sy
 Syx = Sy@Sx
 
+Sxz = Sx@Sz
+Szx = Sz@Sx
+
+Syz = Sy@Sz
+Szy = Sz@Sy
+
 Mxx = Sx2-Sy2
 Myy = Sxy+Syx
+
+Nxx= Sxz+Szx
+Nyy = Syz+Szy
 
 I_n = np.eye(3)
 
@@ -87,7 +100,7 @@ nvcentriy = np.array([np.cross(nvcentri[0, :], nvcentrix[0, :]),
                         np.cross(nvcentri[2, :], nvcentrix[2, :]),
                         np.cross(nvcentri[3, :], nvcentrix[3, :])])
 
-def ipasvertibas(Bx, By, Bz, Mx, My, Mz,D, nuclear = True):
+def ipasvertibas(Bx, By, Bz,D, Mx, My, Mz, Nx = 0, Ny = 0 , nuclear = True):
     # nuclear identity (3x3)
 
     # electron zero-field splitting (MHz)
@@ -99,7 +112,7 @@ def ipasvertibas(Bx, By, Bz, Mx, My, Mz,D, nuclear = True):
     Zeeman  = g_bora * (Bz*Sz + Bx*Sx + By*Sy)
 
     # strain term (MHz)  --- new
-    Strain = Mz*(Sz2)+Mx*Mxx+My*Myy
+    Strain = Mz*(Sz2)+Mx*Mxx+My*Myy+Nx*Nxx+Ny*Nyy
 
     # full electron part in full space (3 electron ⊗ 3 nuclear = 9x9)
     H_elec_full = SDS + Zeeman + Strain
@@ -117,15 +130,33 @@ def ipasvertibas(Bx, By, Bz, Mx, My, Mz,D, nuclear = True):
         Hamiltonian = H_elec_full
     #print(Hamiltonian)
     eigenvalues = np.linalg.eigvalsh(Hamiltonian)
-    return eigenvalues
+    return np.sort(eigenvalues)
 
-def M_components(sigma_nv, a1,a2,b,c):
-    sxx, syy, szz = sigma_nv[0,0], sigma_nv[1,1], sigma_nv[2,2]
-    sxy, sxz, syz = sigma_nv[0,1], sigma_nv[0,2], sigma_nv[1,2]
-    Mx = b*(2*szz - sxx - syy) + c*(2*sxy - syz - sxz)
-    My = np.sqrt(3)*b*(sxx - syy) + np.sqrt(3)*c*(syz - sxz)
-    Mz = a1*(sxx + syy + szz) + 2*a2*(syz + sxz + sxy)
+def Aproximated_stress(dT,b=7.1,a1=-11.7):
+    Mx = -b*alfa_const_dim*C
+    Mz = -a1*alfa_const_dim*C
+    My = 0
+    #Sz2+Sy2-Sx2
     return Mx, My, Mz
+
+def dT_to_D(dT):
+    return 0.075*dT
+
+
+def Plane_stress_tensor(sxx, sxy, syy, a1=-11.7,a2=6.5,b=7.1,c=-5.4): 
+    #Mhz/GPa(Barfuss), assumes plane stress, Nx, Ny not defined, needs further studies
+    Mx = -b*(sxx +syy) + c*2*sxy
+    My = np.sqrt(3)*b*(sxx - syy)
+    Mz = a1*(sxx + syy) + 2*a2* sxy
+    return Mx, My, Mz
+
+def Stress_tensor(sxx,sxy,syy,szz,sxz,syz,a1=-11.7,a2=6.5,b=7.1,c=-5.4, d = 2, e = 4):
+    Mx = b * (2*szz - sxx - syy) + c * (2*sxy - syz - sxz)
+    My = np.sqrt(3) * b * (sxx - syy) + np.sqrt(3) * c * (syz - sxz)
+    Mz = a1 * (sxx + syy + szz) + 2 * a2 * (syz + sxz + sxy)
+    Nx = d * (2*szz - sxx - syy) + e * (2*sxy - syz - sxz)
+    Ny = np.sqrt(3) * d * (sxx - syy) + np.sqrt(3) * e * (syz - sxz)
+    return Mx, My, Mz, Nx, Ny
 
 
 def cetri_centri(sferiskas_koord, D, dirrr = [1,0], P=0.03,a1 = 5,a2= -3,b = -2,c =7, vajagrange = True, griezums="100", tikaienergijas = False):
@@ -161,15 +192,15 @@ def cetri_centri(sferiskas_koord, D, dirrr = [1,0], P=0.03,a1 = 5,a2= -3,b = -2,
 
             sigma_nv = R_k @ sigma @ R_k.T
 
-            Mx, My, Mz = M_components(sigma_nv, a1,a2,b,c)
+            #####Mx, My, Mz = Stress_tensor(sigma_nv, a1,a2,b,c)
 
             nvkomp = np.array([
                 np.dot(nvcentrix[NV, :], lauka_kompoentes),
                 np.dot(nvcentriy[NV, :], lauka_kompoentes),
                 np.dot(nvcentri[NV, :], lauka_kompoentes)])
-            en = ipasvertibas(*nvkomp,Mx, My, Mz, D)
-            energijas = en[1:] - en[0]
-            all_energijas.append(energijas)
+            #en = ipasvertibas(*nvkomp,Mx, My, Mz, D)
+            #energijas = en[1:] - en[0]
+            #all_energijas.append(energijas)
 
         
 
