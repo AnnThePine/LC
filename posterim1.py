@@ -13,7 +13,7 @@ col = ["red", "green", "blue", "cyan"]
 for a in num:
     vals = []
     for b in bval:
-        lvls = ipasvertibas(0,0,b,-0.0, 0, 0, D[a],nuclear=False)
+        lvls = ipasvertibas(0,0,b,5, 0, 0, D[a],nuclear=False)
         vals.append(lvls)
     vals = np.array(vals)
     pirm = vals[:,1]-vals[:,0]
@@ -22,7 +22,7 @@ for a in num:
     plt.plot(bval,otr/1000,color = col[a], linewidth = 5)
 plt.ylabel("Energy, GHz")
 plt.ticklabel_format(useOffset=False)
-plt.xlabel("B,T")
+plt.xlabel("B,G")
 plt.grid()
 #plt.gca().yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
 plt.title("1K temperature difference induced ZFS drift",fontweight='bold')

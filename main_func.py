@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import lmfit
 from scipy.signal import find_peaks
+import mpmath as mp
 
 amplituda = 20
 
@@ -12,49 +13,26 @@ punkti = 5000
 mini = 2650
 maxi = 3100
 
-# nuclear spin I = 1 operators (3x3)
-Ix = np.array(((0., 1, 0),
-               (1, 0, 1),
-               (0, 1, 0)))/np.sqrt(2)
-
-Iy = 1j*np.array(((0., -1, 0),
-                  (1,  0, -1),
-                  (0,  1,  0)))/np.sqrt(2)
-
-Iz = np.array(((1, 0., 0),
-               (0, 0., 0),
-               (0, 0., -1)))
-
-D = 2850.0  # MHz
+D = 2870.0  # MHz
 
 Q = -4.96       # MHz
 gamma_N = 0.3077e-3  # MHz/G   (0.3077 kHz/G)
 
 
-# agparal = -1.7 #MHz būs param , maina videjo piki
-# agper = -7 #MHz būs param, maina attālumu starp mazajām energijām
+Sx = np.array([[0,1,0],[1,0,1],[0,1,0]], dtype=np.complex128)/np.sqrt(2)
+Sy = np.array([[0,-1j,0],[1j,0,-1j],[0,1j,0]], dtype=np.complex128)/np.sqrt(2)
+Sz = np.array([[1,0,0],[0,0,0],[0,0,-1]], dtype=np.complex128)
 
-
-Sx = np.array(((0.,1,0),
-              (1,0,1),
-              (0,1,0)))/np.sqrt(2)
-
-Sy = 1j*np.array(((0.+0j,-1,0),
-              (1,0,-1),
-              (0,1,0)))/np.sqrt(2)
-
-Sz = np.array(((1,0.0,0),
-              (0,0,0),
-              (0,0,-1)))
+Ix, Iy, Iz = Sx, Sy, Sz
 
 agper = -2.7 #Mhz 14N
 agparal = -2.14
 
-g_bora = 28.03*0.1
+g_bora = 2.803
 
 alfa_const_dim = 1.06*10e-6#1/K
 
-C = 1076+125-((2*125^2)/1076)
+C = 1076+125-((2*125**2)/1076)
 
 Sx2 = Sx @ Sx
 Sy2 = Sy @ Sy
@@ -75,10 +53,18 @@ Myy = Sxy+Syx
 Nxx= Sxz+Szx
 Nyy = Syz+Szy
 
-I_n = np.eye(3)
+I_n = np.eye(3, dtype=np.complex128)
 
 SIz = np.kron(Sz, Iz)
 SI = np.kron(Sx, Ix) + np.kron(Sy, Iy)
+
+mp.mp.dps = 60  # vari 50..100; 60 parasti pietiek 1e-12 stabilitātei
+
+def eigvals_hp(H):
+    A = mp.matrix([[mp.mpc(z.real, z.imag) for z in row] for row in H])
+    vals = mp.eig(A)[0]                 # eigenvalues
+    vals = sorted([mp.re(v) for v in vals])  # Herm
+    return vals
 
 # NV centru virzieni 54.7 grādu leņķī
 nvcentri = np.array([[-1, -1, 1],
@@ -100,13 +86,11 @@ nvcentriy = np.array([np.cross(nvcentri[0, :], nvcentrix[0, :]),
                         np.cross(nvcentri[2, :], nvcentrix[2, :]),
                         np.cross(nvcentri[3, :], nvcentrix[3, :])])
 
-def ipasvertibas(Bx, By, Bz,D, Mx, My, Mz, Nx = 0, Ny = 0 , nuclear = True):
+def ipasvertibas(Bx, By, Bz,D, Mx, My, Mz, Nx = 0, Ny = 0 , nuclear = True, Precise = False):
     # nuclear identity (3x3)
 
     # electron zero-field splitting (MHz)
-    Dzz = D * 2 / 3
-    Dxx = Dyy = -Dzz / 2
-    SDS = Dxx * (Sx2) + Dyy * (Sy2) + Dzz * (Sz2)
+    SDS = D*(Sz2 - (2/3)*np.eye(3))
 
     # electron Zeeman (MHz)
     Zeeman  = g_bora * (Bz*Sz + Bx*Sx + By*Sy)
@@ -129,8 +113,14 @@ def ipasvertibas(Bx, By, Bz,D, Mx, My, Mz, Nx = 0, Ny = 0 , nuclear = True):
     else:
         Hamiltonian = H_elec_full
     #print(Hamiltonian)
-    eigenvalues = np.linalg.eigvalsh(Hamiltonian)
-    return np.sort(eigenvalues)
+    Hamiltonian = np.array(Hamiltonian, dtype=np.complex128)
+    Hamiltonian = (Hamiltonian + Hamiltonian.conj().T) / 2
+    if Precise:
+        eigenvalues = eigvals_hp(Hamiltonian)
+    else: 
+        eigenvalues = np.linalg.eigvalsh(Hamiltonian)
+        eigenvalues= np.sort(eigenvalues)
+    return eigenvalues
 
 def Aproximated_stress(dT,b=7.1,a1=-11.7):
     Mx = -b*alfa_const_dim*C
@@ -150,16 +140,24 @@ def Plane_stress_tensor(sxx, sxy, syy, a1=-11.7,a2=6.5,b=7.1,c=-5.4):
     Mz = a1*(sxx + syy) + 2*a2* sxy
     return Mx, My, Mz
 
-def Stress_tensor(sxx,sxy,syy,szz,sxz,syz,a1=-11.7,a2=6.5,b=7.1,c=-5.4, d = 2, e = 4):
+def Stress_tensor(sxx,syy,szz,a1=-11.7,a2=6.5,b=7.1,c=-5.4, d = 2, e = 4, N_term  = False):
+    sxy = np.sqrt(sxx**2+syy**2)
+    sxz = np.sqrt(sxx**2+szz**2)
+    syz = np.sqrt(syy**2+szz**2)
+
     Mx = b * (2*szz - sxx - syy) + c * (2*sxy - syz - sxz)
     My = np.sqrt(3) * b * (sxx - syy) + np.sqrt(3) * c * (syz - sxz)
     Mz = a1 * (sxx + syy + szz) + 2 * a2 * (syz + sxz + sxy)
     Nx = d * (2*szz - sxx - syy) + e * (2*sxy - syz - sxz)
     Ny = np.sqrt(3) * d * (sxx - syy) + np.sqrt(3) * e * (syz - sxz)
-    return Mx, My, Mz, Nx, Ny
+
+    if N_term:
+        return Mx, My, Mz, Nx, Ny
+    else:
+        return Mx, My, Mz
 
 
-def cetri_centri(sferiskas_koord, D, dirrr = [1,0], P=0.03,a1 = 5,a2= -3,b = -2,c =7, vajagrange = True, griezums="100", tikaienergijas = False):
+def cetri_centri(sferiskas_koord, D=2870, dirrr = [1,0], P=0.03, vajagrange = True, griezums="100", tikaienergijas = False, strain = False):
 
     # Ja lauka_kompoentes ir lmfit Parameters objekts, izvelkam vērtības
     if isinstance(sferiskas_koord, lmfit.parameter.Parameters):
@@ -182,25 +180,39 @@ def cetri_centri(sferiskas_koord, D, dirrr = [1,0], P=0.03,a1 = 5,a2= -3,b = -2,
 
     if griezums == "100":
         
-        stress_dir = grad_vect(*dirrr)
+        if strain:
+            print("not finnished")
+        else:
+            stress_dir = grad_vect(*dirrr)
+
+            Mxes,Myes, Mzes = [], [],[]
         # Aprēķina enerģijas katram centram un apkopo kopā
+            for NV in range(4):
+
+                R_k = np.vstack([nvcentrix[NV], nvcentriy[NV], nvcentri[NV]])
+
+                sigma = P * np.outer(stress_dir, stress_dir)
+
+                sigma_nv = R_k @ sigma @ R_k.T
+
+                Mx, My, Mz = Stress_tensor(*sigma_nv)
+
+                Mxes.append(Mx)
+                Myes.append(Mx)
+                Mzes.append(Mx)
+
+
+
+
         for NV in range(4):
-
-            R_k = np.vstack([nvcentrix[NV], nvcentriy[NV], nvcentri[NV]])
-
-            sigma = P * np.outer(stress_dir, stress_dir)
-
-            sigma_nv = R_k @ sigma @ R_k.T
-
-            #####Mx, My, Mz = Stress_tensor(sigma_nv, a1,a2,b,c)
 
             nvkomp = np.array([
                 np.dot(nvcentrix[NV, :], lauka_kompoentes),
                 np.dot(nvcentriy[NV, :], lauka_kompoentes),
                 np.dot(nvcentri[NV, :], lauka_kompoentes)])
-            #en = ipasvertibas(*nvkomp,Mx, My, Mz, D)
-            #energijas = en[1:] - en[0]
-            #all_energijas.append(energijas)
+            en = np.array(ipasvertibas(*nvkomp,D, Mxes[NV],Myes[NV], Mzes[NV]))
+            energijas = en[1:] - en[0]
+            all_energijas.append(energijas)
 
         
 
@@ -221,6 +233,8 @@ def cetri_centri(sferiskas_koord, D, dirrr = [1,0], P=0.03,a1 = 5,a2= -3,b = -2,
 
         merged_peaks = []
         current_group = [ener[0]]
+
+        
 
         for ee in ener[1:]:
             if abs(ee - current_group[-1]) <= 3.0:
@@ -243,6 +257,11 @@ def cetri_centri(sferiskas_koord, D, dirrr = [1,0], P=0.03,a1 = 5,a2= -3,b = -2,
 
         freq_range = np.linspace(mini, maxi, punkti)
         odmr_signal = np.zeros_like(freq_range)
+
+        all_energijas = np.asarray(all_energijas, dtype=float).ravel()
+
+        freq_range = np.linspace(float(mini), float(maxi), int(punkti)).astype(float)
+        odmr_signal = np.zeros(freq_range.shape, dtype=float)
 
         for freq in all_energijas:
             gamma = platums / 2
