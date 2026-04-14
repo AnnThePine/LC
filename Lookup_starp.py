@@ -33,15 +33,17 @@ for kkord in kopkoords:
         print("  alfa, beta, B =", kkord)
         raise  # pārtrauc izpildi, lai redzētu pirmo problēmu
     peaks, peaky = sign_dati(freq, odmr)
-    
-    kord = kkord
-    data.append([*kord, len(peaks), *peaks])
 
-df = pd.DataFrame(data, columns=["alfa","beta", 'B', "skaits",1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24])
+    if len(peaks)==24:
+        kord = kkord
+        starp = np.sort([peaks[23]-peaks[2],peaks[20]-peaks[5],peaks[17]-peaks[8],peaks[14]-peaks[11]])
+        data.append([*kord,*starp])
+
+df = pd.DataFrame(data, columns=["alfa","beta", 'B',1,2,3,4])
 
 print("veido csv")
 
-df.to_csv("field_lookup_table.csv", index=False)
+df.to_csv("Starp_lookup_table.csv", index=False)
 print("Done")
 
 

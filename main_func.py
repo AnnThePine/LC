@@ -25,14 +25,14 @@ Sz = np.array([[1,0,0],[0,0,0],[0,0,-1]], dtype=np.complex128)
 
 Ix, Iy, Iz = Sx, Sy, Sz
 
-agper = -2.7 #Mhz 14N
-agparal = -2.14
 
 g_bora = 2.803
 
 alfa_const_dim = 1.06*10e-6#1/K
 
 C = 1076+125-((2*125**2)/1076)
+
+IzIz = Iz@Iz
 
 Sx2 = Sx @ Sx
 Sy2 = Sy @ Sy
@@ -86,7 +86,7 @@ nvcentriy = np.array([np.cross(nvcentri[0, :], nvcentrix[0, :]),
                         np.cross(nvcentri[2, :], nvcentrix[2, :]),
                         np.cross(nvcentri[3, :], nvcentrix[3, :])])
 
-def ipasvertibas(Bx, By, Bz,D, Mx, My, Mz, Nx = 0, Ny = 0 , nuclear = True, Precise = False):
+def ipasvertibas(Bx, By, Bz,D, Mx, My, Mz, Nx = 0, Ny = 0 ,agper = -2.7, agparal = -2.14,Q = -4.9, nuclear = True, Precise = False):
     # nuclear identity (3x3)
 
     # electron zero-field splitting (MHz)
@@ -102,7 +102,7 @@ def ipasvertibas(Bx, By, Bz,D, Mx, My, Mz, Nx = 0, Ny = 0 , nuclear = True, Prec
     H_elec_full = SDS + Zeeman + Strain
     if nuclear:
     # nuclear-only part (MHz)
-        H_nuc = - gamma_N * (Bx*Ix + By*Iy + Bz*Iz)
+        H_nuc = - gamma_N * (Bx*Ix + By*Iy + Bz*Iz)+Q*IzIz
 
         H_nuc_full = np.kron(I_n, H_nuc)
 
@@ -129,9 +129,17 @@ def Aproximated_stress(dT,b=7.1,a1=-11.7):
     #Sz2+Sy2-Sx2
     return Mx, My, Mz
 
-def dT_to_D(dT):
-    return 0.075*dT
+def Temperature_dependance(dT): #Dt0= 297K
+    D = 2870.28-72.5*(10**-3)*dT-0.39*(10**-3)*(dT**2) #2870
+    Q = -4945.88*(10**-3)+35.5*(10**-6)*dT+0.22*(10**-6)*(dT**2)
+    Apar = -2165.19*(10**-3)+197*(10**-6)*dT+0.73*(10**-6)*(dT**2)
+    Aper = -2635*(10**-3)+154*(10**-6)*dT+0.53*(10**-6)*(dT**2)
+    return D,Q,Apar,Aper
 
+
+
+def peak_to_starp(peaks):
+    return [peaks[23]-peaks[2],peaks[20]-peaks[5],peaks[17]-peaks[8],peaks[14]-peaks[11]]
 
 def Plane_stress_tensor(sxx, sxy, syy, a1=-11.7,a2=6.5,b=7.1,c=-5.4): 
     #Mhz/GPa(Barfuss), assumes plane stress, Nx, Ny not defined, needs further studies
@@ -157,7 +165,7 @@ def Stress_tensor(sxx,syy,szz,a1=-11.7,a2=6.5,b=7.1,c=-5.4, d = 2, e = 4, N_term
         return Mx, My, Mz
 
 
-def cetri_centri(sferiskas_koord, D=2870, dirrr = [1,0], P=0.03, vajagrange = True, griezums="100", tikaienergijas = False, strain = False):
+def cetri_centri(sferiskas_koord, dT=0, Stress_dim_koord = [0,0,0], vajagrange = True, griezums="100", tikaienergijas = False, strain = False):
 
     # Ja lauka_kompoentes ir lmfit Parameters objekts, izvelkam vērtības
     if isinstance(sferiskas_koord, lmfit.parameter.Parameters):
@@ -169,40 +177,32 @@ def cetri_centri(sferiskas_koord, D=2870, dirrr = [1,0], P=0.03, vajagrange = Tr
     
     sferiskas_koord = np.array(sferiskas_koord)
 
+
     # drošības pārbaude, lai redzētu, ja saņem nepareizu formu
     if sferiskas_koord.size < 3:
         raise ValueError(f"sferiskas_koord jāsatur 3 vērtības (vert, hor, abs). Saņemts: {sferiskas_koord}")
 
+    D,Q,Apar,Aper = Temperature_dependance(dT)
 
     lauka_kompoentes = grad_vect(sferiskas_koord[0], sferiskas_koord[1])
     lauka_kompoentes = lauka_kompoentes*sferiskas_koord[2]
     all_energijas = []
 
     if griezums == "100":
-        
-        if strain:
-            print("not finnished")
-        else:
-            stress_dir = grad_vect(*dirrr)
 
-            Mxes,Myes, Mzes = [], [],[]
+        Mxes,Myes, Mzes = [], [],[]
         # Aprēķina enerģijas katram centram un apkopo kopā
-            for NV in range(4):
+        for NV in range(4):
 
-                R_k = np.vstack([nvcentrix[NV], nvcentriy[NV], nvcentri[NV]])
+            R_k = np.vstack([nvcentrix[NV], nvcentriy[NV], nvcentri[NV]]) #3*3 vect
 
-                sigma = P * np.outer(stress_dir, stress_dir)
+            sigma_nv = [nvcentrix[NV]@ Stress_dim_koord, nvcentriy[NV]@Stress_dim_koord, nvcentri[NV]@Stress_dim_koord]
 
-                sigma_nv = R_k @ sigma @ R_k.T
+            Mx, My, Mz = Stress_tensor(*sigma_nv)
 
-                Mx, My, Mz = Stress_tensor(*sigma_nv)
-
-                Mxes.append(Mx)
-                Myes.append(Mx)
-                Mzes.append(Mx)
-
-
-
+            Mxes.append(Mx)
+            Myes.append(My)
+            Mzes.append(Mz)
 
         for NV in range(4):
 
@@ -210,7 +210,10 @@ def cetri_centri(sferiskas_koord, D=2870, dirrr = [1,0], P=0.03, vajagrange = Tr
                 np.dot(nvcentrix[NV, :], lauka_kompoentes),
                 np.dot(nvcentriy[NV, :], lauka_kompoentes),
                 np.dot(nvcentri[NV, :], lauka_kompoentes)])
-            en = np.array(ipasvertibas(*nvkomp,D, Mxes[NV],Myes[NV], Mzes[NV]))
+            if dT == 0:
+                en = np.array(ipasvertibas(*nvkomp,D, Mxes[NV],Myes[NV], Mzes[NV]))
+            else:
+                en = np.array(ipasvertibas(*nvkomp,D, Mxes[NV],Myes[NV], Mzes[NV],agparal=Apar,agper=Aper,Q=Q))
             energijas = en[1:] - en[0]
             all_energijas.append(energijas)
 
@@ -221,7 +224,10 @@ def cetri_centri(sferiskas_koord, D=2870, dirrr = [1,0], P=0.03, vajagrange = Tr
     #strain virzieni
 
     if tikaienergijas:
-        ener = [e for e in all_energijas if mini <= e <= maxi]
+        ener=[]
+        for e in all_energijas:
+            if mini < e:
+                ener.append(e)
         #ener = all_energijas
 
         if len(ener) == 0:
@@ -234,19 +240,17 @@ def cetri_centri(sferiskas_koord, D=2870, dirrr = [1,0], P=0.03, vajagrange = Tr
         merged_peaks = []
         current_group = [ener[0]]
 
-        
-
         for ee in ener[1:]:
-            if abs(ee - current_group[-1]) <= 3.0:
+            if abs(ee - current_group[-1]) <= 1.5:
                 current_group.append(ee)
             else:
-                avg = sum(current_group) / len(current_group)
+                avg = (min(current_group) + max(current_group)) / 2
                 merged_peaks.append(avg)
                 current_group = [ee]
 
         # pievieno pēdējo grupu
         if current_group:
-            avg = sum(current_group) / len(current_group)
+            avg = (min(current_group) + max(current_group)) / 2
             merged_peaks.append(avg)
 
         return merged_peaks

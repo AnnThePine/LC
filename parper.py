@@ -9,7 +9,7 @@ from scipy.signal import find_peaks
 from main_func import cetri_centri, sign_dati, grad_vect, vect_grad, Vid_kvadr
 
 try:
-    testa_dati = pd.read_csv("merged_data0.csv")
+    testa_dati = pd.read_csv("field_lookup_table.csv")
 except FileNotFoundError:
     print("Lookup table not found. Please run the generation script first.")
     exit()
