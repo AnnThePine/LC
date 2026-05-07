@@ -1,0 +1,67 @@
+import numpy as np
+
+
+#Dim_field un Applied_field jāievada kā sarakstskas sastāv no np array (x,y,z)
+#mērījumu skaitam jādalās ar 3
+#prefferably katri 3 savā starpā ortogonāli or close to that
+def Rotacijas_matrx(Dim_field, Applied_field):
+    if len(Dim_field) != len(Applied_field):
+        print("Nav vienādi sarakstu garumi")
+        return None
+    elif len(Dim_field)%3 !=0:
+        print ("nav pa 3")
+        return None
+    rot_matrixes = []
+
+    triplets_dim = []
+    triplets_appl = []
+
+    for i in range(len(Dim_field)/3):
+        Dim = np.array(Dim_field[i*3],Dim_field[i*3+1],Dim_field[i*3+2])
+        Appl = np.array(Applied_field[i*3],Applied_field[i*3+1],Applied_field[i*3+2])
+
+        triplets_dim.append(Dim)
+        triplets_appl.append(Appl)
+
+        H = Dim @ Appl.T
+        U, S, Vt = np.linalg.svd(H)
+        R = Vt.T @ U.T
+        
+        # Ensure it's a rotation and not a reflection
+        if np.linalg.det(R) < 0:
+            Vt[-1, :] *= -1
+            R = Vt.T @ U.T
+            
+        rot_matrixes.append(R)
+
+    all_rot = np.array(rot_matrixes)
+    
+    # Use median to ignore outliers
+    med_matrix = np.median(all_rot, axis=0)
+    
+    # Re-normalize it to a "pure" rotation matrix using SVD
+    U, S, Vt = np.linalg.svd(med_matrix)
+    best_R = U @ Vt
+    
+    individual_errors = []
+    for i in range(len(triplets_dim)):
+        prediction = best_R @ triplets_dim[i]
+        error = np.linalg.norm(prediction - triplets_appl[i])
+        individual_errors.append(error)
+
+    # 3. Printing the report
+    print("-" * 30)
+    print("LABĀKĀ ROTĀCIJAS MATRICA:")
+    print(best_R)
+    print("-" * 30)
+    print(f"Vidējā kļūda (Mean Error): {np.mean(individual_errors):.6f}")
+    print(f"Kļūdu izkliede (Std Dev):  {np.std(individual_errors):.6f}")
+    print("-" * 30)
+    
+    # Highlight outliers (anything > 2 sigma from mean error)
+    threshold = np.mean(individual_errors) + 2 * np.std(individual_errors)
+    for idx, err in enumerate(individual_errors):
+        status = " [OUTLIER?]" if err > threshold else ""
+        print(f"Triplet {idx}: Error = {err:.6f}{status}")
+    
+    return best_R

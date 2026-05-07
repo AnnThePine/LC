@@ -7,43 +7,41 @@ from scipy.signal import savgol_filter
 from main_func import cetri_centri, sign_dati, grad_vect, vect_grad, Vid_kvadr
 
 # Folder containing your .dat files
-data_folder = "data_nv_seperate"
+# data_folder = "data_nv_seperate"
 
-# Find all .dat files
-dat_files = glob.glob(os.path.join(data_folder, "*.dat"))
+# # Find all .dat files
+# dat_files = glob.glob(os.path.join(data_folder, "*.dat"))
 
-if not dat_files:
-    print("No .dat files found in:", data_folder)
-    exit()
+# if not dat_files:
+#     print("No .dat files found in:", data_folder)
+#     exit()
 
 merged_data = pd.DataFrame()
+file_path = "2870_50D.CSV"
+# # --- Read and collect data from each file ---
+# for file_path in dat_files:
+y1 = []
 
-# --- Read and collect data from each file ---
-for file_path in dat_files:
-    y1 = []
-    try:
-        df = pd.read_csv(file_path, sep="\t", header=None)
-    except Exception as e:
-        print(f"Error reading {file_path}: {e}")
-        continue
+df = pd.read_csv(file_path, sep=",", header=0)
 
-    x = df.iloc[:, 0]
-    y1 = df.iloc[:, 2]
-    
-    y = (y1 - y1.min()) / (y1.max() - y1.min())
-    window_size = 5
-    poly_order = 2
-    y_smooth = savgol_filter(y, window_size, poly_order)
-    temp_df = pd.DataFrame({"x": x, "y": y_smooth})
-    merged_data = pd.concat([merged_data, temp_df], ignore_index=True)
+x = df.iloc[:, 2] * 50 +2870
+y1 = df.iloc[:, 1]
+
+y = (y1 - y1.min()) / (y1.max() - y1.min())
+window_size = 200
+poly_order = 2
+y_smooth = savgol_filter(y, window_size, poly_order)
+temp_df = pd.DataFrame({"x": x, "y": y_smooth})
+merged_data = pd.concat([merged_data, temp_df], ignore_index=True)
 
 # --- Merge overlapping x-values ---
 # Average all y-values for identical x
 merged_data = merged_data.groupby("x", as_index=False)["y"].mean()
 
+
 # --- Save to CSV ---
 
-merged_data.to_csv("merged_data_cursed.csv", index=False)
+merged_data.to_csv("merged_data1.csv", index=False)
 
 # --- Plot merged data ---
 
