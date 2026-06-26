@@ -5,20 +5,16 @@ from scipy.signal import find_peaks
 import mpmath as mp
 import pandas as pd
 
-amplituda = 20
-
 platums = 1.5
 
 punkti = 5000
 
-mini = 2650
+mini = 2100
 maxi = 3100
 
 D = 2870.0  # MHz
 
-Q = -5.1       # MHz
 gamma_N = 0.3077e-3  # MHz/G   (0.3077 kHz/G)
-
 
 Sx = np.array([[0,1,0],[1,0,1],[0,1,0]], dtype=np.complex128)/np.sqrt(2)
 Sy = np.array([[0,-1j,0],[1j,0,-1j],[0,1j,0]], dtype=np.complex128)/np.sqrt(2)
@@ -33,8 +29,6 @@ g_bora = 2.803 # MHz/G
 alfa_const_dim = 1.06*10e-6#1/K
 
 C = 1076+125-((2*125**2)/1076)
-
-IzIz = Iz@Iz-2*I_n/3
 
 Sx2 = Sx @ Sx
 Sy2 = Sy @ Sy
@@ -98,9 +92,10 @@ nvcentriy = np.array([np.cross(nvcentri[0, :], nvcentrix[0, :]),
                         np.cross(nvcentri[2, :], nvcentrix[2, :]),
                         np.cross(nvcentri[3, :], nvcentrix[3, :])])
 
-def ipasvertibas(Bx, By, Bz,D, Mx, My, Mz ,agper, agparal,Q, Nx = 0, Ny = 0, nuclear = True, Precise = False):
+def ipasvertibas(Bx, By, Bz,Dplus,Dminus, Mx, My, Mz ,agper, agparal,Q, Nx = 0, Ny = 0, nuclear = True, Precise = False):
 
     # electron zero-field splitting (MHz)
+    D= np.array([[Dplus,0,0],[0,0,0],[0,0,Dminus]])
     SDS = D*Sz2
 
     # electron Zeeman (MHz)
@@ -133,7 +128,7 @@ def ipasvertibas(Bx, By, Bz,D, Mx, My, Mz ,agper, agparal,Q, Nx = 0, Ny = 0, nuc
         eigenvalues= np.sort(eigenvalues)
     return eigenvalues
 
-def Aproximated_stress(dT,b=7.1,a1=-11.7):
+def Aproximated_stress(dT=0,b=7.1,a1=-11.7):
     Mx = -b*alfa_const_dim*C
     Mz = -a1*alfa_const_dim*C
     My = 0
@@ -174,8 +169,18 @@ def Stress_tensor(sxx,syy,szz,a1=-11.7,a2=6.5,b=7.1,c=-5.4, d = 2, e = 4, N_term
     else:
         return Mx, My, Mz
 
+nultais = {
+    "Dplus":[2870,2870,2870,2870],
+    "Dminus":[2870,2870,2870,2870],
+    "stress_dim":[0,0,0],
+    "par":[-2.16,-2.19,-2.12,-2.2],
+    "per":[-3,-3,-3,-3],
+    "Q":[-4.45,-4.41,-3.77,-3.66]
+}
 
-def cetri_centri(sferiskas_koord, dT=0, Stress_dim_koord = [0,0,0],tpar=0,tper=0,tQ=0, vajagrange = True, griezums="100", tikaienergijas = False, FirstFit = False):
+def cetri_centri(sferiskas_koord, params = nultais, vajagrange = True, griezums="100", tikaienergijas = False):
+
+    Stress_dim_koord = params["stress_dim"]
 
     # Ja lauka_kompoentes ir lmfit Parameters objekts, izvelkam vērtības
     if isinstance(sferiskas_koord, lmfit.parameter.Parameters):
@@ -191,8 +196,13 @@ def cetri_centri(sferiskas_koord, dT=0, Stress_dim_koord = [0,0,0],tpar=0,tper=0
     # drošības pārbaude, lai redzētu, ja saņem nepareizu formu
     if sferiskas_koord.size < 3:
         raise ValueError(f"sferiskas_koord jāsatur 3 vērtības (vert, hor, abs). Saņemts: {sferiskas_koord}")
-
-    D,Q,Apar,Aper = Temperature_dependance(dT)
+    
+    Par = params["par"]
+    Per = params["per"]
+    Qq=params["Q"]
+    Dplus=params["Dplus"]
+    Dminus=params["Dminus"]
+    
 
     lauka_kompoentes = grad_vect(sferiskas_koord[0], sferiskas_koord[1])
     lauka_kompoentes = lauka_kompoentes*sferiskas_koord[2]
@@ -203,8 +213,6 @@ def cetri_centri(sferiskas_koord, dT=0, Stress_dim_koord = [0,0,0],tpar=0,tper=0
         Mxes,Myes, Mzes = [], [],[]
         # Aprēķina enerģijas katram centram un apkopo kopā
         for NV in range(4):
-
-            R_k = np.vstack([nvcentrix[NV], nvcentriy[NV], nvcentri[NV]]) #3*3 vect
 
             sigma_nv = [nvcentrix[NV]@ Stress_dim_koord, nvcentriy[NV]@Stress_dim_koord, nvcentri[NV]@Stress_dim_koord]
 
@@ -220,10 +228,8 @@ def cetri_centri(sferiskas_koord, dT=0, Stress_dim_koord = [0,0,0],tpar=0,tper=0
                 np.dot(nvcentrix[NV, :], lauka_kompoentes),
                 np.dot(nvcentriy[NV, :], lauka_kompoentes),
                 np.dot(nvcentri[NV, :], lauka_kompoentes)])
-            if FirstFit:
-                en = np.array(ipasvertibas(*nvkomp,D, Mxes[NV],Myes[NV], Mzes[NV],agparal=tpar, agper=tper,Q=tQ))#agper=tper,Q=tQ
-            else:
-                en = np.array(ipasvertibas(*nvkomp,D, Mxes[NV],Myes[NV], Mzes[NV],agparal=Apar,agper=Aper,Q=Q))
+            
+            en = np.array(ipasvertibas(*nvkomp,Dplus[NV],Dminus[NV], Mxes[NV],Myes[NV], Mzes[NV],agparal=Par[NV], agper=Per[NV],Q=Qq[NV]))
             energijas = [en[8]-en[2],en[5]-en[2],
                  en[7]-en[1],en[3]-en[1],
                  en[6]-en[0],en[4]-en[0]]
@@ -249,21 +255,32 @@ def cetri_centri(sferiskas_koord, dT=0, Stress_dim_koord = [0,0,0],tpar=0,tper=0
         # Sakārto pēc lieluma, lai vieglāk apvienot
         ener.sort()
 
-        merged_peaks = []
-        current_group = [ener[0]]
+        merged_peaks = [ener[0]]
 
         for ee in ener[1:]:
-            if abs(ee - current_group[-1]) <= 1.5:
-                current_group.append(ee)
-            else:
-                avg = (min(current_group) + max(current_group)) / 2
+            if abs(ee - merged_peaks[-1])<= 0.02:
+                avg = (merged_peaks[-1] + ee) / 2
+                merged_peaks.pop()
                 merged_peaks.append(avg)
-                current_group = [ee]
+            else:
+                merged_peaks.append(ee)
 
-        # pievieno pēdējo grupu
-        if current_group:
-            avg = (min(current_group) + max(current_group)) / 2
-            merged_peaks.append(avg)
+
+
+        # current_group = [ener[0]]
+
+        # for ee in ener[1:]:
+        #     if abs(ee - current_group[-1]) <= 0.02:
+        #         current_group.append(ee)
+        #     else:
+        #         avg = (min(current_group) + max(current_group)) / 2
+        #         merged_peaks.append(avg)
+        #         current_group = [ee]
+
+        # # pievieno pēdējo grupu
+        # if current_group:
+        #     avg = (min(current_group) + max(current_group)) / 2
+        #     merged_peaks.append(avg)
 
         return merged_peaks
 
@@ -355,52 +372,27 @@ def Vid_kvadr(x,y,square = True):
             return (x-y)**6
     else:
         return np.inf
-    
-#fit functions
-#temperature
-
-def Temp_fit_function(params, coords,Apara):
-    T  = params['T']
-    Sx = params['Sx']
-    Sy = params['Sy']
-
-    Apar = Apara[0]
-    Aper=Apara[1]
-    q=Apara[2]
-    
-    S = [Sx, Sy, 0]
-    res = cetri_centri(coords, dT=T,Stress_dim_koord=S,tpar=Apar, tper=Aper,tQ=q, tikaienergijas=True,FirstFit=True)
-    return np.asarray(res)
-
-def Temp_fit_residual_function(params, coords,Apara, real):
-    pred = Temp_fit_function(params, coords,Apara)
-    
-    if len(pred) == 24:
-        #print("yes")
-        return (real - pred)**2
-    else:
-        #print(f"fuck \n {pred}")
-        return np.full(24, 5000.0, dtype=float)
 
 
-def Refining_fit(p, ts):
-    #print(p)
-    T  = ts[0]
-    Sx = ts[1]
-    Sy = ts[2]
-    Apar = ts[3]
-    Aper = ts[4]
-    q = ts[5]
-    
+def Refining_fit(p):
+
     coord = [p['alfa'],p['beta'],p['B']]
-    
-    S = [Sx, Sy, 0]
-    res = cetri_centri(coord, dT=T,Stress_dim_koord=S,tpar=Apar, tper=Aper,tQ=q, tikaienergijas=True,FirstFit=True)
+
+    reff = {
+        "Dplus":[p["Dplus1"],p["Dplus2"],p["Dplus3"],p["Dplus4"]],
+        "Dminus":[p["Dminus1"],p["Dminus2"],p["Dminus3"],p["Dminus4"]],
+        "stress_dim":[p['Sx'],p['Sy'],0],
+        "par":[p['Apar1'],p['Apar2'],p['Apar3'],p['Apar4']],
+        "per":[p['Aper1'],p['Aper2'],p['Aper3'],p['Aper4']],
+        "Q":[p['Q1'],p['Q2'],p['Q3'],p['Q4']]
+    }
+
+    res = cetri_centri(coord, params=reff, tikaienergijas=True)
     
     return np.asarray(res)
 
-def Refining_fit_residuals(p, ts, real):
-    pred = Refining_fit(p, ts)
+def Fit(p, real):
+    pred = Refining_fit(p)
     
     if len(pred) == 24:
         #print("yes")
@@ -414,25 +406,6 @@ matrix = np.array([[0, 1,1], [1, 1,1],[-1, 0,1],[0,0,1], [1, 0,1],[-1, -1,1],[0,
               [-1, 1,0], [0, 1,0], [1, 1,0],[-1, 0,0],[0,0,0], [1, 0,0],[-1, -1,0], [0, -1,0], [1, -1,0],
               [-1, 1,-1], [0, 1,-1], [1, 1,-1],[-1, 0,-1],[0,0,-1], [1, 0,-1],[-1, -1,-1], [0, -1,-1], [1, -1,-1]])
 
-params = lmfit.Parameters()
-params.add('T',  value=40,   min=-10, max=100)
-params.add('Sx', value=0,   min=-0.3, max=0.3)
-params.add('Sy', value=0,   min=-0.3, max=0.3)
-
-para = lmfit.Parameters()
-para.add('Apar', value=-2.165,   min=-2.2, max=-1.8)
-para.add('Aper', value=-2.635,   min=-2.7, max=-2.5)
-para.add('Q', value=-4.95,   min=-4, max=-4.8)
-
-def Apar_Fit(para, coords):
-    Apar = para['Apar']
-    Aper = para['Aper']
-    q=para['Q']
-
-    res = cetri_centri(coords,tpar=Apar, tper=Aper,tQ=q, tikaienergijas=True,FirstFit=True)
-    return np.asarray(res)
-
-
 def cheating(dat):
     starp1=[]
     starp2=[]
@@ -440,18 +413,6 @@ def cheating(dat):
         starp1.append(dat[i+3]-dat[i+1])
         starp2.append(dat[i+3]-dat[i+2])
     return np.average(starp1),np.average(starp2)
-
-def Apar_Fit_res(para, coords, real):
-    pred = Apar_Fit(para, coords)
-    
-    if len(pred) == 24:
-        r1, r2 = cheating(real)
-        p1, p2 = cheating(pred)
-        return 10.0 * ((r1 - p1)**2 + (r2 - p2)**2) 
-    else:
-        #print(f"fuck \n {pred}")
-        return np.full(2, 50000000.0, dtype=float)
-
 
 
 def meklebias(peaks,field_lookup_df):
@@ -478,7 +439,8 @@ def meklebias(peaks,field_lookup_df):
             points = gridmin + matrix * att
             kludas = []
             for p in points:
-                energ = sign_dati(*cetri_centri(p, tikaienergijas=False, vajagrange=True))[0]
+                energ = cetri_centri(p, tikaienergijas=True, vajagrange=True)
+                
                 if len(energ) == 24:
                     starpe = peak_to_starp(energ)
                     kludas.append(np.sum(Vid_kvadr(starpe, starppeaks)))
@@ -505,40 +467,72 @@ def meklebias(peaks,field_lookup_df):
 
     arr_sorted = arr[np.argsort(arr[:, -1])] 
 
-    
     finall = []
 
     for aaa in range(5):
+
         rough = arr_sorted[aaa][:3]
-        ree = lmfit.minimize(Apar_Fit_res, para,args=(rough, peaks),method='differential_evolution')
-        Apara = [ree.params[name].value for name in ree.var_names]
-        rez = lmfit.minimize(Temp_fit_residual_function, params, args=(rough,Apara, peaks),method='differential_evolution') 
-        print(rez.params)
-        tesrt = [rez.params[name].value for name in rez.var_names]
-        #print (tesrt) #[22.211847912061096, -0.008420355573983851, 0.018460267821950704]
 
-        tesrt.append(Apara[0])
-        tesrt.append(Apara[1])
-        tesrt.append(Apara[2])
 
-        p = lmfit.Parameters()
-        p.add('alfa', value=rough[0],min= rough[0]-1,max= rough[0]+1)
-        p.add('beta', value=rough[1],min= rough[1]-1,max= rough[1]+1)
-        p.add('B',value=rough[2],min= rough[2]-2,max= rough[2]+2)
+        params = lmfit.Parameters()
+        params.add('alfa', value=rough[0],min= rough[0]-1,max= rough[0]+1)
+        params.add('beta', value=rough[1],min= rough[1]-1,max= rough[1]+1)
+        params.add('B',value=rough[2],min= rough[2]-2,max= rough[2]+2)
+        params.add('Dplus1',  value=2870,min=2840, max=2900)
+        params.add('Dminus1',  value=2870,min=2840, max=2900)
+        params.add('Dplus2',  value=2870,min=2840, max=2900)
+        params.add('Dminus2',  value=2870,min=2840, max=2900)
+        params.add('Dplus3',  value=2870,min=2840, max=2900)
+        params.add('Dminus3',  value=2870,min=2840, max=2900)
+        params.add('Dplus4',  value=2870,min=2840, max=2900)
+        params.add('Dminus4',  value=2870,min=2840, max=2900)
+        params.add('Sx', value=0,   min=-0.3, max=0.3)
+        params.add('Sy', value=0,   min=-0.3, max=0.3)
+        params.add('Apar1', value=-2.12,   min=-2.2, max=-2)
+        params.add('Aper1', value=-2.635,   min=-2.7, max=-3)
+        params.add('Apar2', value=-2.12,   min=-2.2, max=-2)
+        params.add('Aper2', value=-2.635,   min=-2.7, max=-3)
+        params.add('Apar3', value=-2.12,   min=-2.2, max=-2)
+        params.add('Aper3', value=-2.635,   min=-2.7, max=-3)
+        params.add('Apar4', value=-2.12,   min=-2.2, max=-2)
+        params.add('Aper4', value=-2.635,   min=-2.7, max=-3)
+        params.add('Q1', value=-4.95,   min=-5, max=-3.3)
+        params.add('Q2', value=-4.95,   min=-5, max=-3.3)
+        params.add('Q3', value=-4.95,   min=-5, max=-3.3)
+        params.add('Q4', value=-4.95,   min=-5, max=-3.3)
 
-        end_e = lmfit.minimize(Refining_fit_residuals, p, args=(tesrt, peaks))
 
-        finpar = [end_e.params[name].value for name in end_e.var_names]
 
+        for p in params: params[p].vary = False
+        params['Dplus2'].vary =params['Dminus2'].vary=params['Dplus4'].vary =params['Dminus4'].vary=params['Dplus3'].vary =params['Dminus3'].vary=params['Dplus1'].vary =params['Dminus1'].vary=True
+        rezy = lmfit.minimize(Fit, params, args=(peaks,),method='differential_evolution') 
+        params = rezy.params
+
+
+        for p in params: params[p].vary = False
+        params['Sx'].vary= params['Sy'].vary=True
+        rez = lmfit.minimize(Fit, params, args=(peaks,),method='differential_evolution') 
+        params = rez.params
+        
+
+        for p in params: params[p].vary = False
+        params['Apar1'].vary = params['Aper1'].vary=params['Apar2'].vary = params['Aper2'].vary=params['Apar3'].vary = params['Aper3'].vary= params['Apar4'].vary = params['Aper4'].vary=params['Q1'].vary=params['Q2'].vary=params['Q3'].vary=params['Q4'].vary=True
+        ree = lmfit.minimize(Fit, params,args=(peaks,),method='differential_evolution')
+        params = ree.params
+
+        for p in params: params[p].vary = False
+        params['alfa'].vary = params['beta'].vary= params['B'].vary=True
+        end_e = lmfit.minimize(Fit, params, args=(peaks,))
+        params = end_e.params
+
+        # finpar = [params[p].value for p in params]
         # print(np.sqrt(np.sum(end_e.residual**2)))
 
         # print(finpar)
-        finall.append([*finpar,*tesrt, np.sqrt(np.sum(end_e.residual**2))])
-    finarray = np.asarray(finall)
-    arrrrrr = finarray[finarray[:, -1].argsort()]
+        finall.append({**params, 'residual': np.sqrt(np.sum(end_e.residual**2))})
+    #finarray = np.asarray(finall)
+    arrrrrr = sorted(finall, key=lambda x: x['residual'])
     return arrrrrr[0]
-
-
 
 def Read_init(data_name, lookup_name,minalfa = 5,maxalfa = 85,minB = 5,maxB = 500):
     # Read your CSV
@@ -577,3 +571,62 @@ def Read_init(data_name, lookup_name,minalfa = 5,maxalfa = 85,minB = 5,maxB = 50
     print("sākas bias meklēšana")
 
     return testa_dati,field_lookup_df
+
+
+def lorenz(par,f):
+    platums1 = par['platums1']
+    platums2 = par['platums2']
+    platums3 = par['platums3']
+    f0 = par['f0']
+    f1 = par['f1']
+    f2 = par['f2']
+    amplitude1 = par['amplitude1']
+    amplitude2 = par['amplitude2']
+    amplitude3 = par['amplitude3']
+    base = par['base']
+
+    return base+amplitude1*(platums1 / 2)**2 / ((f - f0)**2 + (platums1 / 2)**2)+amplitude2*(platums2 / 2)**2 / ((f - f1)**2 + (platums2 / 2)**2)+amplitude3*(platums3 / 2)**2 / ((f - f2)**2 + (platums3 / 2)**2)
+
+def lorentzianss(par, f, data):
+    return data - lorenz(par,f)
+
+def lorenz_find_peaks(freq, intens):
+    peaks, _ = sign_dati(freq, intens)
+    peaks = np.array(peaks)
+    starts = peaks -1.2
+    stopp = peaks+1.2
+    mask_2d = (freq[:, None] >= starts) & (freq[:, None] <= stopp)
+
+    true_peaks = []
+    found = []
+    regmask = []
+
+    for i in range(int(len(peaks)/3)):
+        boolean_mask = mask_2d[:, i*3] + mask_2d[:, i*3+1] + mask_2d[:, i*3+2]
+
+        freq_regions = freq[boolean_mask]
+        intens_regions = intens[boolean_mask]
+
+        para = lmfit.Parameters()
+        para.add('platums1', value=1.5 ,min= 0.5,max= 3)
+        para.add('platums2', value=1.5 ,min= 0.5,max= 3)
+        para.add('platums3', value=1.5 ,min= 0.5,max= 3)
+        para.add('f0', value=peaks[i*3] ,min= peaks[i*3]-0.5,max= peaks[i*3]+0.5)
+        para.add('f1', value=peaks[i*3+1] ,min= peaks[i*3+1]-0.5,max= peaks[i*3+1]+0.5)
+        para.add('f2', value=peaks[i*3+2]-0.1 ,min= peaks[i*3+2]-0.5,max= peaks[i*3+2]+0.3)
+        para.add('amplitude1', value=0.8,min= 0.5,max= 1)
+        para.add('amplitude2', value=0.8,min= 0.5,max= 1)
+        para.add('amplitude3', value=0.8,min= 0.5,max= 1)
+        para.add("base", value=0.2, min = 0.05, max = 0.3)
+
+
+        fit=lmfit.minimize(lorentzianss,para,args=(freq_regions,intens_regions), method='least_squares')
+
+        true_peaks.append(fit.params['f0'].value)
+        true_peaks.append(fit.params['f1'].value)
+        true_peaks.append(fit.params['f2'].value)
+        found.append(fit.params)
+        regmask.append(boolean_mask)
+
+
+    return np.array(true_peaks), found, regmask
