@@ -2,12 +2,10 @@ from main_func import cetri_centri,sign_dati
 import numpy as np
 import pandas as pd
 
-
-
 B = np.linspace(5,30, 50)
 
-alfas = np.linspace(20,75,50)
-betas = np.linspace(0,90,90)
+alfas = np.linspace(20,50,30)
+betas = np.linspace(0,45,45)
 
 
 print("rekina koordinates")
@@ -41,7 +39,7 @@ for kkord in kopkoords:
         data.append([*kord,*starp])
         print(kkord)
     else: 
-        print(f"fuck {kkord}") 
+        print(f"f {kkord}") 
 
 df = pd.DataFrame(data, columns=["alfa","beta", 'B',1,2,3,4])
 
